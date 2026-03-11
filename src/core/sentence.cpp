@@ -178,8 +178,9 @@ Result<Sentence> Sentence::parse(const std::string& raw) {
     //   [1] total part count
     //   [2] part index
     //   [3] sequential message id (may be empty)
-    //   [4] payload
-    //   [5] fill bits
+    //   [4] channel
+    //   [5] payload
+    //   [6] fill bits
     const std::vector<std::string> fields = split_fields(body, ',');
 
     if (fields.size() < 7u) {
@@ -291,6 +292,15 @@ Result<std::optional<AssembledMessage>> SentenceAssembler::feed(const Sentence& 
     }
 
     const uint8_t seq_id = *sentence.seq_id();
+
+    // TODO(phase-2): The reassembly key is seq_id alone, which is the value
+    // carried in the NMEA sentence.  In a live AIS feed two independent
+    // transmitters can legally use the same seq_id concurrently on the same
+    // channel, making the key ambiguous.  The correct disambiguation key is
+    // (channel, seq_id) or (channel, seq_id, talker).  Addressing this
+    // requires changing sequences_ to an unordered_map keyed on a small
+    // struct with a custom hash; deferred to keep Phase 1 focused on the
+    // core parsing infrastructure.
 
     auto it = sequences_.find(seq_id);
 

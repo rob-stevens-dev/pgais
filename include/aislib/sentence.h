@@ -283,6 +283,13 @@ private:
 
     /**
      * @brief Buffer of in-progress sequences, keyed by seq_id.
+     *
+     * @note TODO(phase-2): Keying on seq_id alone is insufficient for a live
+     *       AIS feed where two transmitters may simultaneously use the same
+     *       seq_id on the same channel.  The correct key is (channel, seq_id)
+     *       or (channel, seq_id, talker).  This limitation is intentional for
+     *       Phase 1; it will be resolved by changing this map to use a
+     *       composite key with a suitable hash.
      */
     std::unordered_map<uint8_t, Sequence> sequences_;
 };

@@ -244,11 +244,15 @@ private:
 /**
  * @brief Maps a printable ASCII character to its 6-bit AIS value.
  *
- * Returns 63 (the '?' placeholder) for characters that have no valid 6-bit
- * AIS representation.
+ * Characters that have no valid 6-bit AIS representation return the sentinel
+ * value 63, which maps back to '?' (ASCII 63) through ais6bit_to_ascii().
+ * Value 63 is chosen because it is printable, is distinct from the padding
+ * character '@' (value 0), and unambiguously signals an encoding failure to
+ * a caller that inspects decoded text.
  *
  * @param ch  The ASCII character to encode.
- * @return    A value in [0, 63].
+ * @return    A value in [0, 63].  Returns 63 for characters outside the
+ *            valid 6-bit AIS range.
  */
 [[nodiscard]] uint8_t ascii_to_ais6bit(char ch) noexcept;
 

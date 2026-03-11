@@ -253,8 +253,11 @@ uint8_t ascii_to_ais6bit(char ch) noexcept {
     if (uch >= 32u && uch <= 63u) {
         return static_cast<uint8_t>(uch);
     }
-    // Characters outside the 6-bit printable range map to '?' (value 15).
-    return 15u;
+    // Characters outside the 6-bit printable range map to '?' (6-bit value 63,
+    // ASCII 63).  Value 63 is the conventional replacement sentinel: it is a
+    // printable character, it round-trips through ais6bit_to_ascii as '?', and
+    // it is distinct from the padding value 0 ('@').
+    return 63u;
 }
 
 } // namespace aislib

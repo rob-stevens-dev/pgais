@@ -419,10 +419,10 @@ TEST(AIS6BitCodec, Value32_IsSpace) {
     EXPECT_EQ(ais6bit_to_ascii(32u), ' ');
 }
 
-TEST(AIS6BitCodec, Value63_IsUnderscore_Again) {
-    // Per ITU-R M.1371-5 Table 44, value 63 maps to ASCII 63 = '?'
-    // (32 + 63 = 95... actually value 63 maps directly to ASCII 63 '?').
-    // Let's verify the actual formula: val=63 < 32? No. Return char(63) = '?'.
+TEST(AIS6BitCodec, Value63_IsQuestionMark) {
+    // Value 63 is >= 32, so the mapping rule returns char(63) directly.
+    // ASCII 63 is '?', which is also the sentinel returned by ascii_to_ais6bit
+    // for characters outside the valid encoding range.
     EXPECT_EQ(ais6bit_to_ascii(63u), '?');
 }
 
@@ -442,10 +442,11 @@ TEST(AIS6BitCodec, Space_ToValue_32) {
     EXPECT_EQ(ascii_to_ais6bit(' '), 32u);
 }
 
-TEST(AIS6BitCodec, InvalidChar_Returns15) {
-    // Characters outside the valid range map to the placeholder value 15 ('?').
-    EXPECT_EQ(ascii_to_ais6bit('\x01'), 15u);
-    EXPECT_EQ(ascii_to_ais6bit('\xFF'), 15u);
+TEST(AIS6BitCodec, InvalidChar_Returns63) {
+    // Characters outside the valid range return the sentinel value 63, which
+    // maps back to '?' (ASCII 63) through ais6bit_to_ascii().
+    EXPECT_EQ(ascii_to_ais6bit('\x01'), 63u);
+    EXPECT_EQ(ascii_to_ais6bit('\xFF'), 63u);
 }
 
 TEST(AIS6BitCodec, HighBitsMasked) {

@@ -61,6 +61,42 @@ static char armour_encode(uint8_t val) noexcept {
 }
 
 // =============================================================================
+// unpack_bits (internal helper)
+// =============================================================================
+
+/**
+ * @brief Unpacks armoured payload characters into a packed big-endian byte
+ *        buffer, stopping once @p significant_bits bits have been written.
+ *
+ * This helper exists to avoid a goto for early exit from the nested loop in
+ * decode_payload().  It is called after all validation has passed, so every
+ * character in @p payload is guaranteed to be a valid armour character.
+ *
+ * @param payload          The validated armoured payload string.
+ * @param significant_bits Total number of bits to write (fill bits excluded).
+ * @param out              Pre-allocated output buffer, zero-initialised,
+ *                         sized to hold exactly @p significant_bits bits.
+ */
+static void unpack_bits(const std::string&    payload,
+                        std::size_t           significant_bits,
+                        std::vector<uint8_t>& out) noexcept
+{
+    for (std::size_t ci = 0; ci < payload.size(); ++ci) {
+        const uint8_t sixbit = armour_decode(payload[ci]);
+        for (std::size_t b = 0; b < 6u; ++b) {
+            const std::size_t bit_idx = ci * 6u + b;
+            if (bit_idx >= significant_bits) {
+                return; // all significant bits written; fill bits discarded
+            }
+            const uint8_t     bit      = (sixbit >> (5u - b)) & 0x01u;
+            const std::size_t byte_idx = bit_idx / 8u;
+            const std::size_t bit_pos  = 7u - (bit_idx % 8u);
+            out[byte_idx] |= static_cast<uint8_t>(bit << bit_pos);
+        }
+    }
+}
+
+// =============================================================================
 // decode_payload
 // =============================================================================
 
@@ -98,20 +134,10 @@ Result<std::vector<uint8_t>> decode_payload(
     std::vector<uint8_t> out(byte_count, 0u);
 
     // Unpack 6 bits per character into the output, stopping at significant_bits.
-    for (std::size_t ci = 0; ci < payload.size(); ++ci) {
-        const uint8_t sixbit = armour_decode(payload[ci]);
-        for (std::size_t b = 0; b < 6u; ++b) {
-            const std::size_t bit_idx = ci * 6u + b;
-            if (bit_idx >= significant_bits) {
-                goto done; // NOLINT: breaking out of nested loops cleanly
-            }
-            const uint8_t bit      = (sixbit >> (5u - b)) & 0x01u;
-            const std::size_t byte_idx = bit_idx / 8u;
-            const std::size_t bit_pos  = 7u - (bit_idx % 8u);
-            out[byte_idx] |= static_cast<uint8_t>(bit << bit_pos);
-        }
-    }
-    done:
+    // Each iteration deposits at most one bit; returning early once bit_idx
+    // reaches significant_bits avoids processing fill bits without requiring a
+    // goto to break out of the nested loop.
+    unpack_bits(payload, significant_bits, out);
 
     return out;
 }
