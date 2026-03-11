@@ -71,6 +71,7 @@ enum class ErrorCode : int {
     MultipartIncomplete    = 402, ///< Reassembly was requested before all fragments arrived.
     MultipartCountInvalid  = 403, ///< Part count field is zero or exceeds the protocol maximum.
     MultipartSeqInvalid    = 404, ///< Sequential message identifier is outside [0, 9].
+    MultipartTalkerConflict= 405, ///< A fragment carries a different VDM/VDO type than the first part of the sequence.
 
     // Message-level errors
     MessageTypeUnknown     = 500, ///< Message type ID is not in the range [1, 27].

@@ -37,6 +37,7 @@ static const char* error_code_description(ErrorCode code) noexcept {
         case ErrorCode::MultipartIncomplete:     return "reassembly requested before all fragments arrived";
         case ErrorCode::MultipartCountInvalid:   return "part count is zero or exceeds the protocol maximum";
         case ErrorCode::MultipartSeqInvalid:     return "sequential message identifier is out of range";
+        case ErrorCode::MultipartTalkerConflict: return "fragment sentence type (VDM/VDO) conflicts with the first part of the sequence";
 
         case ErrorCode::MessageTypeUnknown:      return "message type ID is not in [1, 27]";
         case ErrorCode::MessageTypeUnsupported:  return "message type is known but not yet implemented";

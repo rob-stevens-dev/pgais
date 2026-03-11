@@ -315,6 +315,7 @@ Result<std::optional<AssembledMessage>> SentenceAssembler::feed(const Sentence& 
         seq.received      = 0u;
         seq.parts.resize(part_count);
         seq.talker        = sentence.talker();
+        seq.sentence_type = sentence.sentence_type();
         seq.is_own_vessel = (sentence.sentence_type() == "VDO");
         it = sequences_.emplace(seq_id, std::move(seq)).first;
     } else {
@@ -324,6 +325,14 @@ Result<std::optional<AssembledMessage>> SentenceAssembler::feed(const Sentence& 
         if (existing.part_count != part_count) {
             return Error{ ErrorCode::MultipartCountInvalid,
                           "part count mismatch in seq_id " + std::to_string(seq_id) };
+        }
+
+        if (sentence.sentence_type() != existing.sentence_type) {
+            return Error{ ErrorCode::MultipartTalkerConflict,
+                          "seq_id=" + std::to_string(seq_id) +
+                          " opened as " + existing.sentence_type +
+                          " but part " + std::to_string(part_index) +
+                          " carries " + sentence.sentence_type() };
         }
 
         const uint8_t expected_next = existing.received + 1u;
