@@ -104,14 +104,38 @@ TEST(MessageRegistry, NoDecodersRegisteredInPhase1) {
 TEST(MessageRegistry, DecodeUnregisteredTypeReturnsUnsupported) {
     // With no decoders registered, every valid type ID must return
     // ErrorCode::MessageTypeUnsupported.
+    //
+    // Each iteration constructs a minimal payload whose first 6 bits encode
+    // the specific type ID under test.  This ensures that each call to
+    // decode() actually dispatches to a different type ID rather than
+    // re-decoding the same payload 27 times.
+    //
+    // A minimal AIS payload for type `t` requires at least 6 bits.  We build
+    // a single byte with the type ID packed into its high 6 bits, leaving the
+    // low 2 bits as zero, then encode it via encode_payload.
     MessageRegistry& reg = MessageRegistry::instance();
-    const std::string armored = "15M67J0000000000000000000000";
+
     for (uint8_t t = 1; t <= 27; ++t) {
-        auto r = reg.decode(armored, 0);
+        // Pack type ID into the high 6 bits of a 1-byte buffer.
+        const uint8_t byte0 = static_cast<uint8_t>(t << 2u);
+        const std::vector<uint8_t> raw = { byte0 };
+
+        // encode_payload with bit_length=6 produces exactly one armour
+        // character representing the 6 bits of the type ID field.
+        auto enc = encode_payload(raw, 6u);
+        ASSERT_TRUE(static_cast<bool>(enc))
+            << "encode_payload failed for type " << static_cast<int>(t);
+
+        const std::string& armored = enc.value().first;
+        const uint8_t      fill    = enc.value().second;
+
+        auto r = reg.decode(armored, fill);
         EXPECT_FALSE(static_cast<bool>(r))
             << "Expected error for type " << static_cast<int>(t);
-        EXPECT_EQ(r.error().code(), ErrorCode::MessageTypeUnsupported)
-            << "Wrong error code for type " << static_cast<int>(t);
+        if (!r) {
+            EXPECT_EQ(r.error().code(), ErrorCode::MessageTypeUnsupported)
+                << "Wrong error code for type " << static_cast<int>(t);
+        }
     }
 }
 

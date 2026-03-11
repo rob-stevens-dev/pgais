@@ -18,6 +18,14 @@ namespace aislib {
  *
  * The talker ID is the two-character prefix of the NMEA sentence type field,
  * e.g. "AI" in "!AIVDM".
+ *
+ * This set is intentionally strict: only the talker IDs defined in Annex 8
+ * of ITU-R M.1371-5 are accepted.  Sentences carrying an unrecognised talker
+ * will be rejected with ErrorCode::SentenceTalkerInvalid.  This policy is
+ * deliberate; permissive talker acceptance would silently admit malformed or
+ * non-AIS NMEA sentences into the decoder pipeline.  Integrators working with
+ * feeds that use non-standard talker IDs should pre-process or normalise those
+ * sentences before passing them to Sentence::parse().
  */
 static constexpr std::array<const char*, 9> kValidTalkers = {
     "AB", "AI", "AN", "AR", "AS", "AT", "AX", "BS", "SA"

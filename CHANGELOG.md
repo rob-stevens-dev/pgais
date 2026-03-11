@@ -11,7 +11,26 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ### Added
 
+- **`include/aislib/message.h`** — added a pure virtual `encode()` method to
+  the `Message` base class returning
+  `Result<std::pair<std::string, uint8_t>>`.  Every concrete message subclass
+  introduced in later phases must implement this method.  The return type
+  matches the output contract of `encode_payload()` directly.  A subclass that
+  has no valid encoding (e.g. a decode-only stub) should return
+  `ErrorCode::MessageTypeUnsupported`.  Adding the pure virtual now makes the
+  interface contract explicit and prevents any future subclass from being
+  instantiated without providing an encode path.
+
+- **`CMakePresets.json`** and **`CMakeLists.txt`** — resolved a version
+  conflict.  The presets file declared `"version": 3`, which requires CMake
+  3.21, while `cmake_minimum_required` was set to 3.16.  On any CMake in
+  [3.16, 3.20] the presets file would fail to load.  `cmake_minimum_required`
+  has been raised to 3.20 and the presets version lowered to 2 (requires
+  3.20).  CMake 3.20 is the practical floor for `--preset` command-line
+  support and is available on all CI-targeted platforms.
+
 - **`include/aislib/error.h`** — added `ErrorCode::MultipartTalkerConflict = 405`.  This
+
   covers the case where a subsequent fragment of a multi-part sequence carries
   a different sentence type (VDM vs VDO) than the first fragment.  The error
   is distinct from `MultipartCountInvalid` and `MultipartOutOfOrder` because
@@ -46,6 +65,38 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
   first concrete message decoder lands in Phase 2.  The usage examples now
   include the individual headers directly.  Build instructions have been
   updated to use `cmake --preset` rather than bare `-D` flag combinations.
+
+### Fixed
+
+- **`src/core/message.cpp`** — added a debug-mode `assert` at the top of
+  `MessageRegistry::register_decoder()` that fires when `type_id` is outside
+  [1, 27].  The existing release-mode range guard is retained so that
+  out-of-range calls degrade silently rather than writing out of bounds.  The
+  assert catches registration mistakes during development without any runtime
+  cost in release builds.
+
+- **`tests/core/test_message.cpp`** — the `DecodeUnregisteredTypeReturnsUnsupported`
+  test previously looped over type IDs 1-27 while supplying the same fixed
+  payload string on every iteration.  The loop variable `t` was unused, so
+  every call was dispatching to type 1 rather than to the type the iteration
+  claimed to be testing.  The test now builds a minimal payload for each
+  iteration by packing `t` into the high 6 bits of a single byte and encoding
+  it through `encode_payload()`, so each iteration genuinely exercises a
+  distinct type ID in the registry dispatch path.
+
+### Documentation
+
+- **`src/core/sentence.cpp`** — strengthened the comment on `kValidTalkers` to
+  make the strict-validation policy explicit.  The accepted set (AB, AI, AN,
+  AR, AS, AT, AX, BS, SA) is drawn from ITU-R M.1371-5 Annex 8.  The comment
+  now explains that the strict policy is deliberate and advises integrators
+  working with non-standard talker IDs to normalise their input before calling
+  `Sentence::parse()`.
+
+- **`include/aislib/message.h`** — strengthened the `clear()` Doxygen comment
+  to make the production risk explicit.  The method is for test fixtures only;
+  calling it in production code will disable all decoding until decoders are
+  re-registered.  A `@warning` tag has been added.
 
 ### Fixed (carried from previous session)
 
