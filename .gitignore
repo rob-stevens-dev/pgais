@@ -1,0 +1,53 @@
+# Build directories
+build/
+build-*/
+out/
+
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+CTestTestfile.cmake
+cmake_install.cmake
+install_manifest.txt
+_deps/
+
+# Compiled output
+*.a
+*.so
+*.so.*
+*.dylib
+*.dll
+*.exe
+*.out
+
+# Coverage artefacts
+*.gcno
+*.gcda
+*.gcov
+coverage.info
+coverage/
+
+# Doxygen output
+docs/html/
+docs/latex/
+docs/xml/
+
+# Editor and IDE directories
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# CLion
+cmake-build-*/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+
+# Compiled Python (coverage tooling)
+__pycache__/
+*.pyc
