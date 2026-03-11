@@ -1,4 +1,4 @@
-# aislib
+# pgais
 
 A C++17 library for parsing and generating NMEA 0183 v4.1 AIS (Automatic
 Identification System) messages.  The library implements all 27 message types
@@ -27,53 +27,59 @@ PostgreSQL extension module targeting versions 11 and later.
 
 ```sh
 git clone https://github.com/rob-stevens-dev/pgais.git
-cd aislib
-cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build
+cd pgais
+cmake --preset release
+cmake --build --preset release
 ```
 
 To build and run the test suite:
 
 ```sh
-cmake -B build -DCMAKE_BUILD_TYPE=Debug -DPGAIS_BUILD_TESTS=ON
-cmake --build build
-ctest --test-dir build --output-on-failure
+cmake --preset debug
+cmake --build --preset debug
+ctest --preset debug
 ```
 
 To enable coverage instrumentation (GCC or Clang only):
 
 ```sh
-cmake -B build -DCMAKE_BUILD_TYPE=Debug -DPGAIS_COVERAGE=ON
-cmake --build build
-ctest --test-dir build
-# Generate an lcov report
-lcov --capture --directory build --output-file coverage.info
+cmake --preset coverage
+cmake --build --preset coverage
+ctest --preset coverage
+lcov --capture --directory build/coverage --output-file coverage.info
 genhtml coverage.info --output-directory coverage_html
 ```
+
+See `CMakePresets.json` for the full list of available presets.
 
 ## Installation
 
 ```sh
-cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build
-cmake --install build --prefix /usr/local
+cmake --preset release
+cmake --build --preset release
+cmake --install build/release --prefix /usr/local
 ```
 
 After installation the library is importable from another CMake project via:
 
 ```cmake
-find_package(aislib REQUIRED)
-target_link_libraries(my_target PRIVATE aislib::aislib)
+find_package(pgais REQUIRED)
+target_link_libraries(my_target PRIVATE pgais::pgais_core)
 ```
 
 ## Usage
 
+An umbrella header (`aislib/aislib.h`) will be provided once the first
+concrete message decoders land in Phase 2.  Until then, include the individual
+headers directly.
+
 ### Parsing a single sentence
 
 ```cpp
-#include <aislib.h>
+#include <aislib/sentence.h>
+#include <aislib/message.h>
 
-auto sr = aislib::Sentence::parse("!AIVDM,1,1,,B,15M67J`P00G?Ue`E`FepT4@000S8,0*1A");
+auto sr = aislib::Sentence::parse("!AIVDM,1,1,,B,15M67J`P00G?Ue`E`FepT4@000S8,0*32");
 if (!sr) {
     std::cerr << sr.error().message() << "\n";
     return;
@@ -86,7 +92,7 @@ if (!ar || !ar.value()) {
     return;
 }
 
-const aislib::AssembledMessage& msg = *ar.value();
+const aislib::AssembledMessage& msg = ar.value().value();
 auto dr = aislib::MessageRegistry::instance().decode(msg.payload, msg.fill_bits);
 if (!dr) {
     std::cerr << dr.error().message() << "\n";
@@ -98,7 +104,8 @@ if (!dr) {
 ### Working with the bit stream directly
 
 ```cpp
-#include <aislib.h>
+#include <aislib/payload.h>
+#include <aislib/bitfield.h>
 
 auto buf = aislib::decode_payload(payload_string, fill_bits);
 if (!buf) { /* handle error */ }
@@ -141,7 +148,7 @@ Subsequent phases add concrete message decoders in the following order:
 
 ## Error Handling Model
 
-aislib does not throw exceptions from its public API.  All fallible operations
+pgais does not throw exceptions from its public API.  All fallible operations
 return `Result<T>`, which holds either a value or an `Error`.  This design is a
 hard requirement for embedding the library in a PostgreSQL extension, where the
 server uses `longjmp`-based error handling that is incompatible with C++ stack
