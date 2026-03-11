@@ -4,7 +4,9 @@
 
 namespace aislib {
 
-static constexpr std::size_t kMsg5BitLength = 424u;
+// ITU-R M.1371-5 Table 47: message type 5 payload length is 426 bits.
+// 426 / 6 = 71 armour characters exactly; fill bits = 0.
+static constexpr std::size_t kMsg5BitLength = 426u;
 
 // ---------------------------------------------------------------------------
 // Private constructor
@@ -64,38 +66,39 @@ Result<std::unique_ptr<Message>> Msg5StaticAndVoyageData::decode(const BitReader
     // Bits 0–5: message type
     auto type_r = reader.read_uint(0u, 6u);
     if (!type_r) return Error{ type_r.error() };
-    if (message_type_from_id(static_cast<uint8_t>(type_r.value())) !=
-            MessageType::StaticAndVoyageData) {
-        return Error{ ErrorCode::MessageDecodeFailure, "unexpected message type" };
+    if (message_type_from_id(static_cast<uint8_t>(type_r.value()))
+            != MessageType::StaticAndVoyageData) {
+        return Error{ ErrorCode::MessageDecodeFailure,
+                      "bit reader does not contain a type 5 payload" };
     }
 
     // Bits 6–7: repeat indicator
     auto ri_r = reader.read_uint(6u, 2u);
     if (!ri_r) return Error{ ri_r.error() };
 
-    // Bits 8–37: MMSI (30 bits)
+    // Bits 8–37: MMSI
     auto mmsi_r = reader.read_uint(8u, 30u);
     if (!mmsi_r) return Error{ mmsi_r.error() };
 
-    // Bits 38–39: AIS version (2 bits)
+    // Bits 38–39: AIS version
     auto ver_r = reader.read_uint(38u, 2u);
     if (!ver_r) return Error{ ver_r.error() };
 
-    // Bits 40–69: IMO number (30 bits)
+    // Bits 40–69: IMO number
     auto imo_r = reader.read_uint(40u, 30u);
     if (!imo_r) return Error{ imo_r.error() };
 
-    // Bits 70–111: call sign (42 bits = 7 * 6)
+    // Bits 70–111: call sign (7 characters × 6 bits)
     auto cs_r = reader.read_text(70u, 7u);
     if (!cs_r) return Error{ cs_r.error() };
 
-    // Bits 112–231: vessel name (120 bits = 20 * 6)
+    // Bits 112–231: vessel name (20 characters × 6 bits)
     auto name_r = reader.read_text(112u, 20u);
     if (!name_r) return Error{ name_r.error() };
 
-    // Bits 232–239: ship and cargo type (8 bits)
-    auto stype_r = reader.read_uint(232u, 8u);
-    if (!stype_r) return Error{ stype_r.error() };
+    // Bits 232–239: ship and cargo type
+    auto ship_r = reader.read_uint(232u, 8u);
+    if (!ship_r) return Error{ ship_r.error() };
 
     // Bits 240–248: dimension to bow (9 bits)
     auto bow_r = reader.read_uint(240u, 9u);
@@ -122,55 +125,51 @@ Result<std::unique_ptr<Message>> Msg5StaticAndVoyageData::decode(const BitReader
     if (!eta_mo_r) return Error{ eta_mo_r.error() };
 
     // Bits 278–282: ETA day (5 bits)
-    auto eta_d_r = reader.read_uint(278u, 5u);
-    if (!eta_d_r) return Error{ eta_d_r.error() };
+    auto eta_dy_r = reader.read_uint(278u, 5u);
+    if (!eta_dy_r) return Error{ eta_dy_r.error() };
 
     // Bits 283–287: ETA hour (5 bits)
-    auto eta_h_r = reader.read_uint(283u, 5u);
-    if (!eta_h_r) return Error{ eta_h_r.error() };
+    auto eta_hr_r = reader.read_uint(283u, 5u);
+    if (!eta_hr_r) return Error{ eta_hr_r.error() };
 
     // Bits 288–293: ETA minute (6 bits)
-    auto eta_min_r = reader.read_uint(288u, 6u);
-    if (!eta_min_r) return Error{ eta_min_r.error() };
+    auto eta_mn_r = reader.read_uint(288u, 6u);
+    if (!eta_mn_r) return Error{ eta_mn_r.error() };
 
-    // Bits 294–301: draught (8 bits)
-    auto dr_r = reader.read_uint(294u, 8u);
-    if (!dr_r) return Error{ dr_r.error() };
+    // Bits 294–301: draught (8 bits, 1/10 metre units)
+    auto drft_r = reader.read_uint(294u, 8u);
+    if (!drft_r) return Error{ drft_r.error() };
 
-    // Bits 302–421: destination (120 bits = 20 * 6)
+    // Bits 302–421: destination (20 characters × 6 bits)
     auto dest_r = reader.read_text(302u, 20u);
     if (!dest_r) return Error{ dest_r.error() };
 
     // Bit 422: DTE flag
-    auto dte_r = reader.read_uint(422u, 1u);
+    auto dte_r = reader.read_bool(422u);
     if (!dte_r) return Error{ dte_r.error() };
 
-    // Bit 423: spare (ignored)
-
-    std::string call_sign  = cs_r.value();
-    std::string name       = name_r.value();
-    std::string dest       = dest_r.value();
+    // Bit 423: spare (ignored on decode)
 
     return std::unique_ptr<Message>(new Msg5StaticAndVoyageData(
         static_cast<uint32_t>(mmsi_r.value()),
         static_cast<uint8_t>(ri_r.value()),
         static_cast<uint8_t>(ver_r.value()),
         static_cast<uint32_t>(imo_r.value()),
-        std::move(call_sign),
-        std::move(name),
-        static_cast<uint8_t>(stype_r.value()),
+        std::move(cs_r.value()),
+        std::move(name_r.value()),
+        static_cast<uint8_t>(ship_r.value()),
         static_cast<uint16_t>(bow_r.value()),
         static_cast<uint16_t>(stern_r.value()),
         static_cast<uint8_t>(port_r.value()),
         static_cast<uint8_t>(stbd_r.value()),
         static_cast<uint8_t>(epfd_r.value()),
         static_cast<uint8_t>(eta_mo_r.value()),
-        static_cast<uint8_t>(eta_d_r.value()),
-        static_cast<uint8_t>(eta_h_r.value()),
-        static_cast<uint8_t>(eta_min_r.value()),
-        static_cast<uint8_t>(dr_r.value()),
-        std::move(dest),
-        dte_r.value() != 0u
+        static_cast<uint8_t>(eta_dy_r.value()),
+        static_cast<uint8_t>(eta_hr_r.value()),
+        static_cast<uint8_t>(eta_mn_r.value()),
+        static_cast<uint8_t>(drft_r.value()),
+        std::move(dest_r.value()),
+        dte_r.value()
     ));
 }
 
@@ -240,6 +239,10 @@ Result<std::pair<std::string, uint8_t>> Msg5StaticAndVoyageData::encode() const
     if (!r) return Error{ r.error() };
 
     r = w.write_bool(dte_);
+    if (!r) return Error{ r.error() };
+
+    // Bits 423–424: spare, written as zero.
+    r = w.write_uint(0u, 2u);
     if (!r) return Error{ r.error() };
 
     return encode_payload(w.buffer(), kMsg5BitLength);

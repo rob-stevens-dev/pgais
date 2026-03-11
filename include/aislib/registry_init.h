@@ -22,24 +22,21 @@ namespace aislib {
  *
  * Thread safety: register_all_decoders() is not thread-safe.  All calls to
  * it must complete before any concurrent calls to
- * MessageRegistry::instance().decode() are made.  Post-registration,
- * decode() is safe for concurrent use.
+ * MessageRegistry::instance().decode() are made.  Once registration is
+ * complete, decode() is safe for concurrent read access.
  */
 
 /**
- * @brief Registers all supported AIS message type decoders with the
- *        MessageRegistry singleton.
+ * @brief Registers all currently implemented AIS message type decoders with
+ *        the MessageRegistry singleton.
  *
  * After this call, MessageRegistry::instance().decode() will dispatch
- * correctly for message type IDs registered in this phase.  Message types
- * not yet implemented return ErrorCode::MessageTypeUnsupported as before.
+ * correctly for all message type IDs that have a concrete implementation.
+ * Type IDs without a registered decoder continue to return
+ * ErrorCode::MessageTypeUnsupported.
  *
- * Phase 2 registers decoders for the following type IDs:
- *   1, 2, 3  — Class A position report (Msg1_3PositionReportClassA)
- *   4, 11    — Base station report / UTC date response (Msg4_11BaseStationReport)
- *   5        — Static and voyage data (Msg5StaticAndVoyageData)
- *   18       — Standard Class B CS position report (Msg18ClassBPositionReport)
- *   24       — Class B CS static data report (Msg24StaticDataReport)
+ * The set of registered types grows with each development phase.  Consult
+ * the CHANGELOG for the current list of supported type IDs.
  */
 void register_all_decoders();
 

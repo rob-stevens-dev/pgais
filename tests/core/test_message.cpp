@@ -1,28 +1,66 @@
 /**
  * @file test_message.cpp
- * @brief Unit tests for aislib::MessageType, aislib::MessageRegistry, and
- *        the message_type_from_id() helper.
+ * @brief Unit tests for MessageType, message_type_from_id, and MessageRegistry.
  *
- * Phase 1 has no registered decoders, so every decode() call is expected to
- * return ErrorCode::MessageTypeUnsupported for valid type IDs in [1, 27] and
- * ErrorCode::MessageTypeUnknown for values outside that range.
+ * The MessageRegistry is a process-lifetime singleton.  Phase 2 and later test
+ * fixtures call register_all_decoders() in their SetUp() methods, which means
+ * that by the time this translation unit's tests run the registry may already
+ * be populated.  Any test that requires the registry to be in a specific state
+ * must use the RegistryIsolation fixture, which clears the registry in SetUp()
+ * and restores it to a fully-registered state in TearDown().
+ *
+ * Tests that do not interact with the registry state are plain TEST() cases
+ * and carry no fixture overhead.
  */
 
 #include <gtest/gtest.h>
+
+#include "aislib/error.h"
 #include "aislib/message.h"
 #include "aislib/payload.h"
-
-#include <cstdint>
-#include <vector>
+#include "aislib/registry_init.h"
 
 using namespace aislib;
 
-// ---------------------------------------------------------------------------
-// MessageType enum – value correctness
-// ---------------------------------------------------------------------------
+// =============================================================================
+// Fixture: RegistryIsolation
+//
+// Clears the registry before each test and restores it after.  Use for any
+// test that makes assertions about which decoders are or are not registered.
+// =============================================================================
 
-TEST(MessageType, ValuesMatchITU_R_M1371) {
-    // Numeric values are normative (ITU-R M.1371-5) and must not drift.
+/**
+ * @brief Test fixture that provides an isolated MessageRegistry state.
+ *
+ * SetUp() clears all registered decoders so that the test starts with an
+ * empty registry.  TearDown() calls register_all_decoders() to restore the
+ * singleton to the fully-populated state expected by other test suites that
+ * share this process.
+ *
+ * Do not use this fixture for tests that merely decode a payload; use it only
+ * when the test specifically asserts on registration state.
+ */
+class RegistryIsolation : public ::testing::Test {
+protected:
+    void SetUp() override
+    {
+        MessageRegistry::instance().clear();
+    }
+
+    void TearDown() override
+    {
+        // Restore decoders so that subsequent test suites in this process see
+        // a fully initialised registry, matching what register_all_decoders()
+        // would have installed.
+        register_all_decoders();
+    }
+};
+
+// =============================================================================
+// MessageType enum values
+// =============================================================================
+
+TEST(MessageType, NumericValuesMatchSpec) {
     EXPECT_EQ(static_cast<uint8_t>(MessageType::PositionReportClassA),           1u);
     EXPECT_EQ(static_cast<uint8_t>(MessageType::PositionReportClassA_Assigned),  2u);
     EXPECT_EQ(static_cast<uint8_t>(MessageType::PositionReportClassA_Response),  3u);
@@ -56,9 +94,9 @@ TEST(MessageType, UnknownSentinelIsZero) {
     EXPECT_EQ(static_cast<uint8_t>(MessageType::Unknown), 0u);
 }
 
-// ---------------------------------------------------------------------------
+// =============================================================================
 // message_type_from_id
-// ---------------------------------------------------------------------------
+// =============================================================================
 
 TEST(MessageTypeFromId, ValidRangeRoundTrips) {
     for (uint8_t i = 1; i <= 27; ++i) {
@@ -82,37 +120,34 @@ TEST(MessageTypeFromId, SixtyThreeMapsToUnknown) {
     EXPECT_EQ(message_type_from_id(63), MessageType::Unknown);
 }
 
-// ---------------------------------------------------------------------------
-// MessageRegistry – Phase 1 stub behaviour
-// ---------------------------------------------------------------------------
+// =============================================================================
+// MessageRegistry — singleton identity
+// =============================================================================
 
 TEST(MessageRegistry, InstanceIsSingleton) {
-    // Two calls to instance() must return the same object.
     EXPECT_EQ(&MessageRegistry::instance(), &MessageRegistry::instance());
 }
 
-TEST(MessageRegistry, NoDecodersRegisteredInPhase1) {
-    // Phase 1 registers no decoders.  has_decoder() must return false for all
-    // type IDs.
+// =============================================================================
+// MessageRegistry — registration state (uses RegistryIsolation fixture)
+// =============================================================================
+
+TEST_F(RegistryIsolation, NoDecoders_HasDecoderReturnsFalseForAllTypes) {
+    // After clear(), no type ID should have a decoder registered.
     MessageRegistry& reg = MessageRegistry::instance();
     for (uint8_t i = 0; i <= 27; ++i) {
         EXPECT_FALSE(reg.has_decoder(i))
-            << "Unexpected decoder registered for type " << static_cast<int>(i);
+            << "Unexpected decoder present for type " << static_cast<int>(i);
     }
 }
 
-TEST(MessageRegistry, DecodeUnregisteredTypeReturnsUnsupported) {
-    // With no decoders registered, every valid type ID must return
+TEST_F(RegistryIsolation, NoDecoders_DecodeReturnsUnsupported) {
+    // With an empty registry, every valid type ID must return
     // ErrorCode::MessageTypeUnsupported.
     //
     // Each iteration constructs a minimal payload whose first 6 bits encode
-    // the specific type ID under test.  This ensures that each call to
-    // decode() actually dispatches to a different type ID rather than
-    // re-decoding the same payload 27 times.
-    //
-    // A minimal AIS payload for type `t` requires at least 6 bits.  We build
-    // a single byte with the type ID packed into its high 6 bits, leaving the
-    // low 2 bits as zero, then encode it via encode_payload.
+    // the type ID under test, ensuring that decode() dispatches to a distinct
+    // type ID rather than re-decoding the same payload 27 times.
     MessageRegistry& reg = MessageRegistry::instance();
 
     for (uint8_t t = 1; t <= 27; ++t) {
@@ -120,8 +155,6 @@ TEST(MessageRegistry, DecodeUnregisteredTypeReturnsUnsupported) {
         const uint8_t byte0 = static_cast<uint8_t>(t << 2u);
         const std::vector<uint8_t> raw = { byte0 };
 
-        // encode_payload with bit_length=6 produces exactly one armour
-        // character representing the 6 bits of the type ID field.
         auto enc = encode_payload(raw, 6u);
         ASSERT_TRUE(static_cast<bool>(enc))
             << "encode_payload failed for type " << static_cast<int>(t);
@@ -139,6 +172,25 @@ TEST(MessageRegistry, DecodeUnregisteredTypeReturnsUnsupported) {
     }
 }
 
+TEST_F(RegistryIsolation, RegisterDecoder_HasDecoderReturnsTrue) {
+    // Verify that registering a stub decoder makes has_decoder() return true
+    // for that type ID and only that type ID.
+    MessageRegistry& reg = MessageRegistry::instance();
+
+    auto stub = [](const BitReader&) -> Result<std::unique_ptr<Message>> {
+        return Error{ ErrorCode::MessageTypeUnsupported };
+    };
+
+    reg.register_decoder(1u, stub);
+    EXPECT_TRUE(reg.has_decoder(1u));
+    EXPECT_FALSE(reg.has_decoder(2u));
+}
+
+// =============================================================================
+// MessageRegistry — payload error paths (no fixture needed — these fail before
+// dispatch and are independent of whether decoders are registered)
+// =============================================================================
+
 TEST(MessageRegistry, DecodeEmptyPayloadReturnsPayloadError) {
     MessageRegistry& reg = MessageRegistry::instance();
     auto r = reg.decode("", 0);
@@ -148,7 +200,8 @@ TEST(MessageRegistry, DecodeEmptyPayloadReturnsPayloadError) {
 
 TEST(MessageRegistry, DecodeInvalidFillBitsReturnsPayloadError) {
     MessageRegistry& reg = MessageRegistry::instance();
-    auto r = reg.decode("15M67J0000000000000000000000", 6); // fill_bits > 5
+    // fill_bits > 5 is always invalid regardless of registration state.
+    auto r = reg.decode("15M67J0000000000000000000000", 6);
     EXPECT_FALSE(static_cast<bool>(r));
     EXPECT_EQ(r.error().code(), ErrorCode::PayloadFillBitsInvalid);
 }
