@@ -29,12 +29,15 @@ add_executable(pgais_core_tests
     test_message.cpp
 )
 
-# Link against pgais_core and GoogleTest.  GoogleTest headers are brought in
-# via SYSTEM include paths so the compiler treats them as system headers and
-# suppresses any warnings they generate.
+# pgais_messages is linked here because test_message.cpp calls
+# register_all_decoders() in the RegistryIsolation::TearDown() method to
+# restore the singleton to a fully-populated state after each isolation test.
+# pgais_messages links pgais_core publicly, so the explicit pgais_core entry
+# below is redundant but retained for clarity.
 target_link_libraries(pgais_core_tests
     PRIVATE
         pgais_core
+        pgais_messages
         GTest::gtest_main
 )
 

@@ -1,9 +1,11 @@
 include(FetchContent)
 
-# GoogleTest is fetched by the parent (tests/core/CMakeLists.txt) when both
-# test directories are enabled.  We must not call FetchContent_Declare again
-# with the same name; instead we reference the target directly.  If this file
-# is included before tests/core has run FetchContent, we call it here.
+# GoogleTest is fetched by tests/core/CMakeLists.txt when both test
+# directories are enabled together.  FetchContent_Declare may not be called
+# twice with the same content name in a single CMake invocation, so we check
+# whether the GTest targets already exist before attempting to fetch again.
+# This guard also covers the case where tests/messages is configured in
+# isolation without tests/core.
 if(NOT TARGET GTest::gtest)
     FetchContent_Declare(
         googletest
