@@ -134,6 +134,71 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
   scoped to Phase 2.
 
 ---
+[0.2.0] — 2026-03-11
+Implements Phase 2: concrete message decoders for types 1–5, 11, 18, and 24,
+along with the umbrella header and decoder registration infrastructure.
+Added
+
+include/aislib/messages/msg1_3.h / src/messages/msg1_3.cpp —
+Msg1_3PositionReportClassA decodes and encodes ITU-R M.1371-5 message
+types 1 (Scheduled Class A), 2 (Assigned Class A), and 3 (Special Class A).
+All 168-bit fields are covered: MMSI, navigation status, rate of turn,
+speed over ground, position accuracy, longitude, latitude, course over
+ground, true heading, time stamp, and RAIM flag.  Longitude and latitude are
+returned as std::optional<double> with automatic sentinel detection
+(0x6791AC0 and 0x3412140 respectively).  A static decode(BitReader&)
+factory and a virtual encode() implementation are provided.
+include/aislib/messages/msg4_11.h / src/messages/msg4_11.cpp —
+Msg4_11BaseStationReport decodes and encodes message types 4 (Base Station
+Report) and 11 (UTC/Date Response).  The 168-bit payload carries UTC year,
+month, day, hour, minute, second, position accuracy, longitude, latitude,
+EPFD type, and RAIM flag.  Coordinate sentinel detection mirrors the
+Class A decoder.
+include/aislib/messages/msg5.h / src/messages/msg5.cpp —
+Msg5StaticAndVoyageData decodes and encodes the two-part 424-bit type 5
+message.  Fields covered: AIS version, IMO number, call sign (7 characters),
+vessel name (20 characters), ship and cargo type, reference point dimensions
+(bow, stern, port, starboard), EPFD type, ETA (month, day, hour, minute),
+draught, destination (20 characters), and DTE flag.  Trailing @ padding
+and trailing spaces are stripped from all text fields on decode.
+include/aislib/messages/msg18.h / src/messages/msg18.cpp —
+Msg18ClassBPositionReport decodes and encodes the 168-bit type 18 message.
+Fields covered: reserved, speed over ground, position accuracy, longitude,
+latitude, course over ground, true heading, time stamp, regional reserved,
+CS flag, display flag, DSC flag, band flag, message 22 flag, assigned flag,
+and RAIM flag.
+include/aislib/messages/msg24.h / src/messages/msg24.cpp —
+Msg24StaticDataReport decodes and encodes both parts of the 168-bit type
+24 message.  Part A carries vessel name (20 characters).  Part B carries
+ship type, vendor ID (7 characters), call sign (7 characters), reference
+point dimensions, and EPFD type.  Part A and Part B are independent
+single-part sentences; the decoder branches on the part number field.
+Fields from the undelivered part default to zero or empty string and are
+documented as such.
+include/aislib/registry_init.h / src/registry_init.cpp —
+register_all_decoders() registers decoder functions for all message types
+implemented in Phase 2 (1, 2, 3, 4, 5, 11, 18, 24) with the
+MessageRegistry singleton.  Callers must invoke this function once at
+startup before issuing any MessageRegistry::decode() calls.
+include/aislib/aislib.h — umbrella header that includes all Phase 1 and
+Phase 2 public headers in a single include.  Intended for consumers that do
+not need to control include granularity.
+tests/messages/ — 97 unit tests across five files covering all Phase 2
+message types.  Each file provides a build_* helper that constructs a
+valid raw bit buffer for the corresponding message, field-level decode tests,
+padding-strip tests, encode/decode round-trip tests, too-short payload error
+tests, wrong-type error tests, and registry dispatch tests.
+
+Fixed
+
+src/core/bitfield.cpp — BitReader::read_text() previously delegated
+bounds checking to check_bounds(), which enforces a maximum field width of
+64 bits.  A 20-character text field spans 120 bits, causing every multi-char
+text read to return ErrorCode::BitfieldWidthInvalid.  The call to
+check_bounds() has been replaced with a direct range check
+(offset + char_count * 6 > bit_length()), which carries no upper-bound
+restriction.  All existing ReadText_OutOfRange tests continue to pass.
+
 
 ## [0.1.0] — 2026-03-11
 
