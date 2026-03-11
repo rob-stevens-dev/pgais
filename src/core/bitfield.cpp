@@ -94,9 +94,8 @@ Result<std::string> BitReader::read_text(std::size_t offset, std::size_t char_co
     }
 
     const std::size_t total_bits = char_count * 6u;
-    ErrorCode ec = check_bounds(offset, total_bits);
-    if (ec != ErrorCode::Ok) {
-        return Error{ ec };
+    if (offset + total_bits > bit_length()) {
+        return Error{ ErrorCode::BitfieldOutOfRange };
     }
 
     std::string result;
