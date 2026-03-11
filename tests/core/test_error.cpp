@@ -83,6 +83,7 @@ TEST(Error, AllErrorCodesHaveDescriptions) {
         ErrorCode::MultipartIncomplete,
         ErrorCode::MultipartCountInvalid,
         ErrorCode::MultipartSeqInvalid,
+        ErrorCode::MultipartTalkerConflict,
         ErrorCode::MessageTypeUnknown,
         ErrorCode::MessageTypeUnsupported,
         ErrorCode::MessageDecodeFailure,

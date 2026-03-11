@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    name: ${{ matrix.compiler }} / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            compiler: gcc-12
+            cc: gcc-12
+            cxx: g++-12
+            coverage: true
+          - os: ubuntu-22.04
+            compiler: clang-15
+            cc: clang-15
+            cxx: clang++-15
+            coverage: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install compiler (${{ matrix.compiler }})
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y ${{ matrix.cc }} ${{ matrix.cxx }}
+
+      - name: Install coverage tools
+        if: matrix.coverage
+        run: sudo apt-get install -y lcov
+
+      - name: Configure (ci preset)
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+        run: cmake --preset ci
+
+      - name: Build
+        run: cmake --build --preset ci
+
+      - name: Test
+        run: ctest --preset ci
+
+      # Coverage steps run only on the GCC leg.
+      - name: Configure (coverage preset)
+        if: matrix.coverage
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+        run: cmake --preset coverage
+
+      - name: Build (coverage)
+        if: matrix.coverage
+        run: cmake --build --preset coverage
+
+      - name: Test (coverage)
+        if: matrix.coverage
+        run: ctest --preset coverage
+
+      - name: Generate coverage report
+        if: matrix.coverage
+        run: |
+          lcov --capture \
+               --directory build/coverage \
+               --output-file coverage.info \
+               --ignore-errors mismatch
+          lcov --remove coverage.info \
+               '/usr/*' \
+               '*/build/coverage/_deps/*' \
+               --output-file coverage.info
+          lcov --list coverage.info
+
+      - name: Upload coverage report
+        if: matrix.coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.info
+          retention-days: 14

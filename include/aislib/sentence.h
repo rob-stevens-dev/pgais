@@ -274,11 +274,12 @@ private:
      * @brief Internal state for a single in-progress multi-part sequence.
      */
     struct Sequence {
-        std::vector<std::string> parts;      ///< Payload fragments, indexed by part_index-1.
+        std::vector<std::string> parts;           ///< Payload fragments, indexed by part_index-1.
         uint8_t                  part_count{ 0 }; ///< Expected total number of parts.
         uint8_t                  received{ 0 };   ///< Number of parts received so far.
-        std::string              talker;      ///< Talker from the first part.
-        bool                     is_own_vessel{ false }; ///< VDO flag from the first part.
+        std::string              talker;           ///< Talker from the first part.
+        std::string              sentence_type;    ///< "VDM" or "VDO" from the first part; all subsequent parts must match.
+        bool                     is_own_vessel{ false }; ///< True when sentence_type is "VDO".
     };
 
     /**

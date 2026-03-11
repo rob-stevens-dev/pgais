@@ -1,0 +1,105 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": { "major": 3, "minor": 16, "patch": 0 },
+
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "17",
+        "CMAKE_CXX_STANDARD_REQUIRED": "ON",
+        "CMAKE_CXX_EXTENSIONS": "OFF"
+      }
+    },
+    {
+      "name": "debug",
+      "displayName": "Debug",
+      "description": "Debug build with tests enabled.",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "PGAIS_BUILD_TESTS": "ON"
+      }
+    },
+    {
+      "name": "release",
+      "displayName": "Release",
+      "description": "Optimised release build without tests.",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "PGAIS_BUILD_TESTS": "OFF"
+      }
+    },
+    {
+      "name": "coverage",
+      "displayName": "Coverage",
+      "description": "Debug build with gcov coverage instrumentation (GCC or Clang only).",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "PGAIS_BUILD_TESTS": "ON",
+        "PGAIS_ENABLE_COVERAGE": "ON"
+      }
+    },
+    {
+      "name": "ci",
+      "displayName": "CI",
+      "description": "Configuration used by the continuous integration pipeline.",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "PGAIS_BUILD_TESTS": "ON"
+      }
+    }
+  ],
+
+  "buildPresets": [
+    {
+      "name": "debug",
+      "displayName": "Debug",
+      "configurePreset": "debug"
+    },
+    {
+      "name": "release",
+      "displayName": "Release",
+      "configurePreset": "release"
+    },
+    {
+      "name": "coverage",
+      "displayName": "Coverage",
+      "configurePreset": "coverage"
+    },
+    {
+      "name": "ci",
+      "displayName": "CI",
+      "configurePreset": "ci",
+      "jobs": 4
+    }
+  ],
+
+  "testPresets": [
+    {
+      "name": "debug",
+      "displayName": "Debug",
+      "configurePreset": "debug",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "coverage",
+      "displayName": "Coverage",
+      "configurePreset": "coverage",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "ci",
+      "displayName": "CI",
+      "configurePreset": "ci",
+      "output": { "outputOnFailure": true },
+      "execution": { "jobs": 4 }
+    }
+  ]
+}

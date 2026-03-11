@@ -286,6 +286,37 @@ TEST(SentenceAssembler, MultipartWithoutSeqIdRejectedAtParse) {
     EXPECT_EQ(sr.error().code(), ErrorCode::MultipartSeqInvalid);
 }
 
+TEST(SentenceAssembler, VdoVdmMixReturnsConflictError) {
+    // Part 1 is VDM (other-vessel traffic).  Part 2 claims VDO (own-vessel).
+    // The assembler must reject the inconsistent second part.
+    SentenceAssembler assembler;
+
+    // Build part 1 as VDM manually so both parts share the same seq_id.
+    std::string body1 = "AIVDM,2,1,6,A,P1,0";
+    uint8_t cs1 = 0;
+    for (char c : body1) cs1 ^= static_cast<uint8_t>(c);
+    char hex1[3];
+    snprintf(hex1, sizeof(hex1), "%02X", cs1);
+    const std::string raw1 = "!" + body1 + "*" + hex1;
+
+    // Build part 2 as VDO with the same seq_id.
+    std::string body2 = "AIVDO,2,2,6,A,P2,0";
+    uint8_t cs2 = 0;
+    for (char c : body2) cs2 ^= static_cast<uint8_t>(c);
+    char hex2[3];
+    snprintf(hex2, sizeof(hex2), "%02X", cs2);
+    const std::string raw2 = "!" + body2 + "*" + hex2;
+
+    auto sr1 = Sentence::parse(raw1); ASSERT_TRUE(static_cast<bool>(sr1));
+    auto sr2 = Sentence::parse(raw2); ASSERT_TRUE(static_cast<bool>(sr2));
+
+    ASSERT_TRUE(static_cast<bool>(assembler.feed(sr1.value())));
+
+    auto ar2 = assembler.feed(sr2.value());
+    EXPECT_FALSE(static_cast<bool>(ar2));
+    EXPECT_EQ(ar2.error().code(), ErrorCode::MultipartTalkerConflict);
+}
+
 // ---------------------------------------------------------------------------
 // SentenceAssembler::reset
 // ---------------------------------------------------------------------------

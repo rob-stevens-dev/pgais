@@ -9,7 +9,45 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Added
+
+- **`include/aislib/error.h`** — added `ErrorCode::MultipartTalkerConflict = 405`.  This
+  covers the case where a subsequent fragment of a multi-part sequence carries
+  a different sentence type (VDM vs VDO) than the first fragment.  The error
+  is distinct from `MultipartCountInvalid` and `MultipartOutOfOrder` because
+  it indicates a logical contradiction in the sequence rather than a structural
+  framing problem.
+
+- **`CMakePresets.json`** — added a presets file defining `debug`, `release`,
+  `coverage`, and `ci` configure/build/test presets.  The presets remove the
+  need to remember flag combinations manually and are understood natively by
+  CMake 3.19+, VS Code CMake Tools, and CLion 2023+.  The README build
+  instructions have been updated to use preset names.
+
+- **`.github/workflows/ci.yml`** — added a GitHub Actions workflow triggered
+  on push and pull request to `main`.  The matrix covers GCC 12 and Clang 15
+  on Ubuntu 22.04.  Every leg configures via the `ci` preset, builds, and runs
+  the full test suite with `--output-on-failure`.  The GCC leg additionally
+  runs a coverage build using the `coverage` preset, generates an lcov report,
+  and uploads it as a workflow artifact with a 14-day retention window.
+
 ### Fixed
+
+- **`src/core/sentence.cpp`** — `SentenceAssembler::feed()` now validates that
+  every fragment of a multi-part sequence carries the same sentence type
+  (VDM or VDO) as the first fragment.  Previously, a sequence opened by a VDM
+  sentence could be completed by a VDO sentence, silently producing an
+  `AssembledMessage` with an incorrect `is_own_vessel` flag.  The new check
+  returns `ErrorCode::MultipartTalkerConflict` with a detail string identifying
+  the seq_id and the conflicting sentence types.
+
+- **`README.md`** — removed a forward reference to `aislib/aislib.h`, which
+  does not exist in Phase 1.  The umbrella header will be introduced when the
+  first concrete message decoder lands in Phase 2.  The usage examples now
+  include the individual headers directly.  Build instructions have been
+  updated to use `cmake --preset` rather than bare `-D` flag combinations.
+
+### Fixed (carried from previous session)
 
 - **`payload.cpp`** — replaced a `goto`-based early exit from a nested loop in
   `decode_payload()` with a named static helper function `unpack_bits()`.  The
