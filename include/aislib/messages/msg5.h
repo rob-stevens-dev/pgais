@@ -1,0 +1,270 @@
+#pragma once
+
+#include "aislib/message.h"
+
+#include <cstdint>
+#include <string>
+
+namespace aislib {
+
+/**
+ * @file messages/msg5.h
+ * @brief AIS message type 5 — Static and voyage related data.
+ *
+ * ITU-R M.1371-5, Section 3.3.5 defines message type 5 as a two-part message
+ * carrying static and voyage-related information about a vessel.  The combined
+ * payload is 426 bits spread across two NMEA sentences.  The
+ * SentenceAssembler reassembles the two parts before the decoder is called.
+ *
+ * Fields of interest:
+ *
+ *   IMO number: 1–999 999 999.  The value 0 indicates "not available".
+ *
+ *   Call sign: 7 characters, 6-bit ASCII padded with '@'.
+ *
+ *   Vessel name: 20 characters, 6-bit ASCII padded with '@'.
+ *
+ *   Ship type: 8-bit unsigned integer.  Values 0–99 per ITU-R M.1371-5
+ *   Table 54.  The value 0 indicates "not available or no ship".
+ *
+ *   Dimensions: bow, stern, port, starboard offsets in metres from the
+ *   AIS antenna reference point to each edge of the vessel.  Each field
+ *   is 6 or 9 bits; a value of 0 in any dimension field means "not available".
+ *
+ *   EPFD type: 4-bit field, same coding as message type 4.
+ *
+ *   ETA: month (4 bits), day (5 bits), hour (5 bits), minute (6 bits).
+ *   Values of 0 in any ETA component indicate "not available".
+ *
+ *   Draught: 8-bit unsigned integer in 1/10 metre units.  A value of 0
+ *   means "not available".
+ *
+ *   Destination: 20 characters, 6-bit ASCII.
+ *
+ *   DTE: 1-bit Data Terminal Equipment flag (0 = available, 1 = not available).
+ */
+
+// ---------------------------------------------------------------------------
+// Msg5StaticAndVoyageData
+// ---------------------------------------------------------------------------
+
+/**
+ * @brief Decoded representation of AIS message type 5.
+ *
+ * Construction is only possible through the static @c decode() factory or
+ * via the decoder function @c decode_msg5() registered with MessageRegistry.
+ */
+class Msg5StaticAndVoyageData final : public Message {
+public:
+    /**
+     * @brief Decodes a static and voyage data message from the given bit reader.
+     *
+     * The BitReader must be positioned at bit 0 of the fully assembled and
+     * decoded two-part payload.  The method reads exactly 426 bits.
+     *
+     * @param reader  A BitReader over the decoded payload bit stream.
+     * @return        A decoded message object, or an Error.
+     *
+     * Possible errors: ErrorCode::PayloadTooShort, ErrorCode::MessageDecodeFailure.
+     */
+    [[nodiscard]] static Result<std::unique_ptr<Message>> decode(const BitReader& reader);
+
+    /** @brief Returns MessageType::StaticAndVoyageData. */
+    [[nodiscard]] MessageType type() const noexcept override
+    {
+        return MessageType::StaticAndVoyageData;
+    }
+
+    /**
+     * @brief Encodes this message into an NMEA AIS armoured payload string.
+     *
+     * Produces a 426-bit payload.  The fill bit count will be 2 (426 bits
+     * require 71 armour characters covering 426 bits; 71 * 6 = 426 bits
+     * exactly, fill = 0).
+     *
+     * Note: multi-part framing (splitting the payload across two NMEA
+     * sentences) is the caller's responsibility using SentenceAssembler or
+     * equivalent logic.
+     *
+     * @return  Pair of (armoured payload, fill bits), or an Error.
+     */
+    [[nodiscard]] Result<std::pair<std::string, uint8_t>> encode() const override;
+
+    // -----------------------------------------------------------------------
+    // Field accessors
+    // -----------------------------------------------------------------------
+
+    /**
+     * @brief Returns the AIS version indicator [0–3].
+     *
+     * 0 = ITU-R M.1371-1; 1 = ITU-R M.1371-3; 2 = ITU-R M.1371-5;
+     * 3 = reserved.
+     */
+    [[nodiscard]] uint8_t ais_version() const noexcept { return ais_version_; }
+
+    /**
+     * @brief Returns the IMO ship identification number [0–999999999].
+     *
+     * The value 0 means "not available".
+     */
+    [[nodiscard]] uint32_t imo_number() const noexcept { return imo_number_; }
+
+    /**
+     * @brief Returns the call sign string (up to 7 characters, '@'-padded).
+     *
+     * Trailing '@' padding characters are stripped before returning.
+     */
+    [[nodiscard]] const std::string& call_sign() const noexcept { return call_sign_; }
+
+    /**
+     * @brief Returns the vessel name string (up to 20 characters, '@'-padded).
+     *
+     * Trailing '@' padding characters are stripped before returning.
+     */
+    [[nodiscard]] const std::string& vessel_name() const noexcept { return vessel_name_; }
+
+    /**
+     * @brief Returns the ship and cargo type code [0–255].
+     *
+     * Refer to ITU-R M.1371-5 Table 54 for the full enumeration.  The value
+     * 0 indicates "not available or no ship".
+     */
+    [[nodiscard]] uint8_t ship_type() const noexcept { return ship_type_; }
+
+    /**
+     * @brief Returns the bow dimension in metres [0–511].
+     *
+     * Distance from the AIS antenna reference point to the bow.  0 = unknown.
+     */
+    [[nodiscard]] uint16_t dim_to_bow() const noexcept { return dim_to_bow_; }
+
+    /**
+     * @brief Returns the stern dimension in metres [0–511].
+     *
+     * Distance from the AIS antenna reference point to the stern.  0 = unknown.
+     */
+    [[nodiscard]] uint16_t dim_to_stern() const noexcept { return dim_to_stern_; }
+
+    /**
+     * @brief Returns the port dimension in metres [0–63].
+     *
+     * Distance from the AIS antenna reference point to the port side.  0 = unknown.
+     */
+    [[nodiscard]] uint8_t dim_to_port() const noexcept { return dim_to_port_; }
+
+    /**
+     * @brief Returns the starboard dimension in metres [0–63].
+     *
+     * Distance from the AIS antenna reference point to the starboard side.  0 = unknown.
+     */
+    [[nodiscard]] uint8_t dim_to_starboard() const noexcept { return dim_to_starboard_; }
+
+    /**
+     * @brief Returns the EPFD type [0–15].
+     *
+     * Same coding as message type 4.  See msg4_11.h for common values.
+     */
+    [[nodiscard]] uint8_t epfd() const noexcept { return epfd_; }
+
+    /**
+     * @brief Returns the ETA month [0–12].  0 = not available.
+     */
+    [[nodiscard]] uint8_t eta_month() const noexcept { return eta_month_; }
+
+    /**
+     * @brief Returns the ETA day [0–31].  0 = not available.
+     */
+    [[nodiscard]] uint8_t eta_day() const noexcept { return eta_day_; }
+
+    /**
+     * @brief Returns the ETA hour [0–23, or 24 when not available].
+     */
+    [[nodiscard]] uint8_t eta_hour() const noexcept { return eta_hour_; }
+
+    /**
+     * @brief Returns the ETA minute [0–59, or 60 when not available].
+     */
+    [[nodiscard]] uint8_t eta_minute() const noexcept { return eta_minute_; }
+
+    /**
+     * @brief Returns the maximum present static draught in 1/10 metre units [0–255].
+     *
+     * Divide by 10.0 for metres.  The value 0 means "not available".
+     */
+    [[nodiscard]] uint8_t draught() const noexcept { return draught_; }
+
+    /**
+     * @brief Returns the destination string (up to 20 characters, '@'-padded).
+     *
+     * Trailing '@' padding characters are stripped before returning.
+     */
+    [[nodiscard]] const std::string& destination() const noexcept { return destination_; }
+
+    /**
+     * @brief Returns the DTE (Data Terminal Equipment) flag.
+     *
+     * false = DTE available; true = DTE not available (default).
+     */
+    [[nodiscard]] bool dte() const noexcept { return dte_; }
+
+private:
+    /**
+     * @brief Private constructor used exclusively by decode().
+     */
+    explicit Msg5StaticAndVoyageData(
+        uint32_t    mmsi,
+        uint8_t     repeat_indicator,
+        uint8_t     ais_version,
+        uint32_t    imo_number,
+        std::string call_sign,
+        std::string vessel_name,
+        uint8_t     ship_type,
+        uint16_t    dim_to_bow,
+        uint16_t    dim_to_stern,
+        uint8_t     dim_to_port,
+        uint8_t     dim_to_starboard,
+        uint8_t     epfd,
+        uint8_t     eta_month,
+        uint8_t     eta_day,
+        uint8_t     eta_hour,
+        uint8_t     eta_minute,
+        uint8_t     draught,
+        std::string destination,
+        bool        dte
+    ) noexcept;
+
+    uint8_t     ais_version_;
+    uint32_t    imo_number_;
+    std::string call_sign_;
+    std::string vessel_name_;
+    uint8_t     ship_type_;
+    uint16_t    dim_to_bow_;
+    uint16_t    dim_to_stern_;
+    uint8_t     dim_to_port_;
+    uint8_t     dim_to_starboard_;
+    uint8_t     epfd_;
+    uint8_t     eta_month_;
+    uint8_t     eta_day_;
+    uint8_t     eta_hour_;
+    uint8_t     eta_minute_;
+    uint8_t     draught_;
+    std::string destination_;
+    bool        dte_;
+};
+
+// ---------------------------------------------------------------------------
+// Decoder function — registered with MessageRegistry
+// ---------------------------------------------------------------------------
+
+/**
+ * @brief Decoder function for AIS message type 5.
+ *
+ * Registered with MessageRegistry::register_decoder() for type ID 5 during
+ * library initialisation.
+ *
+ * @param reader  BitReader positioned at the start of the decoded payload.
+ * @return        Decoded message, or an Error.
+ */
+[[nodiscard]] Result<std::unique_ptr<Message>> decode_msg5(const BitReader& reader);
+
+} // namespace aislib
