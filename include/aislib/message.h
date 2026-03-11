@@ -4,6 +4,7 @@
 #include "payload.h"
 #include "bitfield.h"
 
+#include <cassert>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -130,6 +131,23 @@ public:
     [[nodiscard]] virtual MessageType type() const noexcept = 0;
 
     /**
+     * @brief Encodes this message into an NMEA AIS armoured payload string.
+     *
+     * The returned pair contains the armoured payload string and the fill bit
+     * count in [0, 5], matching the output contract of encode_payload().  The
+     * caller is responsible for framing the result into a complete NMEA
+     * sentence using Sentence::format() (introduced in a later phase).
+     *
+     * Concrete subclasses must implement this method.  A subclass that has no
+     * valid encoding (e.g. a decode-only stub) should return
+     * ErrorCode::MessageTypeUnsupported.
+     *
+     * @return  A pair of (armoured payload string, fill bits) on success, or
+     *          an Error describing the failure.
+     */
+    [[nodiscard]] virtual Result<std::pair<std::string, uint8_t>> encode() const = 0;
+
+    /**
      * @brief Returns the Maritime Mobile Service Identity (MMSI).
      *
      * The MMSI is a 30-bit unsigned integer present in all message types at
@@ -238,8 +256,15 @@ public:
     /**
      * @brief Removes all registered decoders.
      *
-     * Intended for use in test fixtures that need a clean registry state.
-     * Not safe to call while other threads may be calling decode().
+     * Intended exclusively for use in unit test fixtures that need an isolated
+     * registry state between tests.  Calling this in production code will cause
+     * all subsequent decode() calls to return MessageTypeUnsupported until
+     * decoders are re-registered.
+     *
+     * This method is not thread-safe.  It must not be called while any other
+     * thread may be calling decode(), register_decoder(), or has_decoder().
+     *
+     * @warning Do not call from production code.
      */
     void clear() noexcept;
 

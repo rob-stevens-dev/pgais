@@ -1,6 +1,8 @@
 #include "aislib/message.h"
 #include "aislib/payload.h"
 
+#include <cassert>
+
 namespace aislib {
 
 // =============================================================================
@@ -65,8 +67,13 @@ MessageRegistry& MessageRegistry::instance() noexcept {
 }
 
 void MessageRegistry::register_decoder(uint8_t type_id, DecoderFn fn) {
+    // Fire in debug builds to catch registration mistakes at development time.
+    // The range guard below is retained so release builds degrade gracefully
+    // rather than writing out of bounds.
+    assert(type_id >= 1u && type_id <= 27u &&
+           "register_decoder: type_id must be in [1, 27]");
     if (type_id == 0u || type_id > 27u) {
-        return; // Silently ignore out-of-range registrations.
+        return; // Silently ignore out-of-range registrations in release builds.
     }
     decoders_[type_id] = fn;
 }
