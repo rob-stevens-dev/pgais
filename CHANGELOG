@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to pgais are documented in this file.
+All notable changes to aislib are documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -9,196 +9,130 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
-### Added
-
-- **`include/aislib/message.h`** — added a pure virtual `encode()` method to
-  the `Message` base class returning
-  `Result<std::pair<std::string, uint8_t>>`.  Every concrete message subclass
-  introduced in later phases must implement this method.  The return type
-  matches the output contract of `encode_payload()` directly.  A subclass that
-  has no valid encoding (e.g. a decode-only stub) should return
-  `ErrorCode::MessageTypeUnsupported`.  Adding the pure virtual now makes the
-  interface contract explicit and prevents any future subclass from being
-  instantiated without providing an encode path.
-
-- **`CMakePresets.json`** and **`CMakeLists.txt`** — resolved a version
-  conflict.  The presets file declared `"version": 3`, which requires CMake
-  3.21, while `cmake_minimum_required` was set to 3.16.  On any CMake in
-  [3.16, 3.20] the presets file would fail to load.  `cmake_minimum_required`
-  has been raised to 3.20 and the presets version lowered to 2 (requires
-  3.20).  CMake 3.20 is the practical floor for `--preset` command-line
-  support and is available on all CI-targeted platforms.
-
-- **`include/aislib/error.h`** — added `ErrorCode::MultipartTalkerConflict = 405`.  This
-
-  covers the case where a subsequent fragment of a multi-part sequence carries
-  a different sentence type (VDM vs VDO) than the first fragment.  The error
-  is distinct from `MultipartCountInvalid` and `MultipartOutOfOrder` because
-  it indicates a logical contradiction in the sequence rather than a structural
-  framing problem.
-
-- **`CMakePresets.json`** — added a presets file defining `debug`, `release`,
-  `coverage`, and `ci` configure/build/test presets.  The presets remove the
-  need to remember flag combinations manually and are understood natively by
-  CMake 3.19+, VS Code CMake Tools, and CLion 2023+.  The README build
-  instructions have been updated to use preset names.
-
-- **`.github/workflows/ci.yml`** — added a GitHub Actions workflow triggered
-  on push and pull request to `main`.  The matrix covers GCC 12 and Clang 15
-  on Ubuntu 22.04.  Every leg configures via the `ci` preset, builds, and runs
-  the full test suite with `--output-on-failure`.  The GCC leg additionally
-  runs a coverage build using the `coverage` preset, generates an lcov report,
-  and uploads it as a workflow artifact with a 14-day retention window.
-
 ### Fixed
 
-- **`src/core/sentence.cpp`** — `SentenceAssembler::feed()` now validates that
-  every fragment of a multi-part sequence carries the same sentence type
-  (VDM or VDO) as the first fragment.  Previously, a sequence opened by a VDM
-  sentence could be completed by a VDO sentence, silently producing an
-  `AssembledMessage` with an incorrect `is_own_vessel` flag.  The new check
-  returns `ErrorCode::MultipartTalkerConflict` with a detail string identifying
-  the seq_id and the conflicting sentence types.
+- `src/messages/msg5.cpp` — `kMsg5BitLength` was 424, which is the sum of the
+  named content fields only.  ITU-R M.1371-5 Table 47 specifies 426 bits:
+  424 content bits plus a 2-bit spare at bits 423–424.  The constant has been
+  corrected to 426.  The `encode()` method now writes the spare as
+  `write_uint(0u, 2u)` rather than `write_uint(0u, 1u)`.  426 / 6 = 71 armour
+  characters exactly, so the encoded form carries 0 fill bits as documented.
 
-- **`README.md`** — removed a forward reference to `aislib/aislib.h`, which
-  does not exist in Phase 1.  The umbrella header will be introduced when the
-  first concrete message decoder lands in Phase 2.  The usage examples now
-  include the individual headers directly.  Build instructions have been
-  updated to use `cmake --preset` rather than bare `-D` flag combinations.
+- `include/aislib/messages/msg5.h` — the `encode()` Doxygen stated "fill bit
+  count will be 2" immediately after stating the payload is 426 bits.  These
+  are contradictory: 426 % 6 = 0.  The comment now correctly states that the
+  fill bit count is 0, and explains the arithmetic (424 content bits + 2 spare
+  bits = 426 = 71 × 6).  The file-level comment has been updated to document
+  the spare as 2 bits at positions 423–424.
 
-### Fixed
+- `tests/core/test_message.cpp` — the `NoDecodersRegisteredInPhase1` test
+  asserted that `has_decoder()` returns false for all 27 type IDs.  Because
+  `MessageRegistry` is a process-lifetime singleton and GoogleTest does not
+  guarantee execution order across translation units, any Phase 2 fixture
+  calling `register_all_decoders()` before this test runs would cause it to
+  fail.  The test has been converted to a `TEST_F` using a new
+  `RegistryIsolation` fixture that calls `clear()` in `SetUp()` and
+  `register_all_decoders()` in `TearDown()`, ensuring the singleton is in a
+  known state for the duration of each isolation test and restored afterwards.
+  `DecodeUnregisteredTypeReturnsUnsupported` has been converted to the same
+  fixture for the same reason.  A third `TEST_F` has been added that positively
+  verifies the `register_decoder()` / `has_decoder()` round-trip.  Payload
+  error tests that fire before dispatch remain plain `TEST()` cases and carry
+  no fixture overhead.
 
-- **`src/core/message.cpp`** — added a debug-mode `assert` at the top of
-  `MessageRegistry::register_decoder()` that fires when `type_id` is outside
-  [1, 27].  The existing release-mode range guard is retained so that
-  out-of-range calls degrade silently rather than writing out of bounds.  The
-  assert catches registration mistakes during development without any runtime
-  cost in release builds.
+- `tests/core/CMakeLists.txt` — `pgais_core_tests` now links against
+  `pgais_messages` in addition to `pgais_core`.  The `RegistryIsolation`
+  fixture calls `register_all_decoders()`, which is defined in
+  `src/registry_init.cpp` and compiled into `pgais_messages`.  Without this
+  link entry the linker could not resolve the symbol.
 
-- **`tests/core/test_message.cpp`** — the `DecodeUnregisteredTypeReturnsUnsupported`
-  test previously looped over type IDs 1-27 while supplying the same fixed
-  payload string on every iteration.  The loop variable `t` was unused, so
-  every call was dispatching to type 1 rather than to the type the iteration
-  claimed to be testing.  The test now builds a minimal payload for each
-  iteration by packing `t` into the high 6 bits of a single byte and encoding
-  it through `encode_payload()`, so each iteration genuinely exercises a
-  distinct type ID in the registry dispatch path.
+- `include/aislib/registry_init.h` — the `register_all_decoders()` Doxygen
+  previously enumerated the specific type IDs registered in Phase 2.  That
+  list becomes stale whenever a new phase merges.  The comment now states the
+  invariant ("all message type IDs that have a concrete implementation") and
+  directs readers to the CHANGELOG for the current list.
 
-### Documentation
-
-- **`src/core/sentence.cpp`** — strengthened the comment on `kValidTalkers` to
-  make the strict-validation policy explicit.  The accepted set (AB, AI, AN,
-  AR, AS, AT, AX, BS, SA) is drawn from ITU-R M.1371-5 Annex 8.  The comment
-  now explains that the strict policy is deliberate and advises integrators
-  working with non-standard talker IDs to normalise their input before calling
-  `Sentence::parse()`.
-
-- **`include/aislib/message.h`** — strengthened the `clear()` Doxygen comment
-  to make the production risk explicit.  The method is for test fixtures only;
-  calling it in production code will disable all decoding until decoders are
-  re-registered.  A `@warning` tag has been added.
-
-### Fixed (carried from previous session)
-
-- **`payload.cpp`** — replaced a `goto`-based early exit from a nested loop in
-  `decode_payload()` with a named static helper function `unpack_bits()`.  The
-  logic is identical; the `goto` was the only use of that construct in the
-  codebase and is inconsistent with idiomatic C++17.
-
-- **`sentence.cpp`** — corrected the field-index comment in `Sentence::parse()`
-  that mapped `[4]` to "payload".  The correct mapping is `[4]` channel,
-  `[5]` payload, `[6]` fill bits, which matches the actual `fields[]` access
-  pattern immediately below the comment.
-
-- **`bitfield.h` / `bitfield.cpp`** — resolved an inconsistency between the
-  Doxygen comment on `ascii_to_ais6bit()` and its implementation.  The header
-  stated the invalid-input sentinel was 63; the implementation returned 15.
-  The sentinel is now consistently 63 (maps back to `'?'` via
-  `ais6bit_to_ascii()`), chosen because it is printable, unambiguously signals
-  an encoding failure, and is distinct from the padding character `'@'`
-  (value 0).  The test `InvalidChar_Returns15` has been renamed to
-  `InvalidChar_Returns63` and updated to assert the correct value.  The test
-  `Value63_IsUnderscore_Again` has been renamed to `Value63_IsQuestionMark`
-  with an accurate description of the mapping.
-
-### Documentation
-
-- **`sentence.h`** / **`sentence.cpp`** — added `TODO(phase-2)` comments on
-  the `SentenceAssembler::sequences_` member (header) and at the point of
-  `sequences_.find()` (implementation) documenting the known limitation that
-  the reassembly map is keyed on `seq_id` alone.  In a live AIS feed, two
-  independent transmitters may legally use the same `seq_id` concurrently on
-  the same channel, making the key ambiguous.  The correct key is
-  `(channel, seq_id)` or `(channel, seq_id, talker)`.  This is an intentional
-  deferral; the fix requires a composite map key with a custom hash and is
-  scoped to Phase 2.
+- `tests/messages/test_msg5.cpp` — the `build_type5` helper wrote the spare
+  field as `write_uint(0u, 1u)` (1 bit), producing a 425-bit buffer.  The
+  decoder requires 426 bits, so every test using this helper returned
+  `PayloadTooShort` before reading any field.  The spare write has been
+  corrected to `write_uint(0u, 2u)` to match the corrected `kMsg5BitLength`.
 
 ---
-[0.2.0] — 2026-03-11
+
+## [0.2.0] — 2026-03-11
+
 Implements Phase 2: concrete message decoders for types 1–5, 11, 18, and 24,
 along with the umbrella header and decoder registration infrastructure.
-Added
 
-include/aislib/messages/msg1_3.h / src/messages/msg1_3.cpp —
-Msg1_3PositionReportClassA decodes and encodes ITU-R M.1371-5 message
-types 1 (Scheduled Class A), 2 (Assigned Class A), and 3 (Special Class A).
-All 168-bit fields are covered: MMSI, navigation status, rate of turn,
-speed over ground, position accuracy, longitude, latitude, course over
-ground, true heading, time stamp, and RAIM flag.  Longitude and latitude are
-returned as std::optional<double> with automatic sentinel detection
-(0x6791AC0 and 0x3412140 respectively).  A static decode(BitReader&)
-factory and a virtual encode() implementation are provided.
-include/aislib/messages/msg4_11.h / src/messages/msg4_11.cpp —
-Msg4_11BaseStationReport decodes and encodes message types 4 (Base Station
-Report) and 11 (UTC/Date Response).  The 168-bit payload carries UTC year,
-month, day, hour, minute, second, position accuracy, longitude, latitude,
-EPFD type, and RAIM flag.  Coordinate sentinel detection mirrors the
-Class A decoder.
-include/aislib/messages/msg5.h / src/messages/msg5.cpp —
-Msg5StaticAndVoyageData decodes and encodes the two-part 424-bit type 5
-message.  Fields covered: AIS version, IMO number, call sign (7 characters),
-vessel name (20 characters), ship and cargo type, reference point dimensions
-(bow, stern, port, starboard), EPFD type, ETA (month, day, hour, minute),
-draught, destination (20 characters), and DTE flag.  Trailing @ padding
-and trailing spaces are stripped from all text fields on decode.
-include/aislib/messages/msg18.h / src/messages/msg18.cpp —
-Msg18ClassBPositionReport decodes and encodes the 168-bit type 18 message.
-Fields covered: reserved, speed over ground, position accuracy, longitude,
-latitude, course over ground, true heading, time stamp, regional reserved,
-CS flag, display flag, DSC flag, band flag, message 22 flag, assigned flag,
-and RAIM flag.
-include/aislib/messages/msg24.h / src/messages/msg24.cpp —
-Msg24StaticDataReport decodes and encodes both parts of the 168-bit type
-24 message.  Part A carries vessel name (20 characters).  Part B carries
-ship type, vendor ID (7 characters), call sign (7 characters), reference
-point dimensions, and EPFD type.  Part A and Part B are independent
-single-part sentences; the decoder branches on the part number field.
-Fields from the undelivered part default to zero or empty string and are
-documented as such.
-include/aislib/registry_init.h / src/registry_init.cpp —
-register_all_decoders() registers decoder functions for all message types
-implemented in Phase 2 (1, 2, 3, 4, 5, 11, 18, 24) with the
-MessageRegistry singleton.  Callers must invoke this function once at
-startup before issuing any MessageRegistry::decode() calls.
-include/aislib/aislib.h — umbrella header that includes all Phase 1 and
-Phase 2 public headers in a single include.  Intended for consumers that do
-not need to control include granularity.
-tests/messages/ — 97 unit tests across five files covering all Phase 2
-message types.  Each file provides a build_* helper that constructs a
-valid raw bit buffer for the corresponding message, field-level decode tests,
-padding-strip tests, encode/decode round-trip tests, too-short payload error
-tests, wrong-type error tests, and registry dispatch tests.
+### Added
 
-Fixed
+- `include/aislib/messages/msg1_3.h` / `src/messages/msg1_3.cpp` —
+  `Msg1_3PositionReportClassA` decodes and encodes ITU-R M.1371-5 message
+  types 1 (Scheduled Class A), 2 (Assigned Class A), and 3 (Special Class A).
+  All 168-bit fields are covered: MMSI, navigation status, rate of turn,
+  speed over ground, position accuracy, longitude, latitude, course over
+  ground, true heading, time stamp, and RAIM flag.  Longitude and latitude are
+  returned as `std::optional<double>` with automatic sentinel detection
+  (`0x6791AC0` and `0x3412140` respectively).  A static `decode(BitReader&)`
+  factory and a virtual `encode()` implementation are provided.
 
-src/core/bitfield.cpp — BitReader::read_text() previously delegated
-bounds checking to check_bounds(), which enforces a maximum field width of
-64 bits.  A 20-character text field spans 120 bits, causing every multi-char
-text read to return ErrorCode::BitfieldWidthInvalid.  The call to
-check_bounds() has been replaced with a direct range check
-(offset + char_count * 6 > bit_length()), which carries no upper-bound
-restriction.  All existing ReadText_OutOfRange tests continue to pass.
+- `include/aislib/messages/msg4_11.h` / `src/messages/msg4_11.cpp` —
+  `Msg4_11BaseStationReport` decodes and encodes message types 4 (Base Station
+  Report) and 11 (UTC/Date Response).  The 168-bit payload carries UTC year,
+  month, day, hour, minute, second, position accuracy, longitude, latitude,
+  EPFD type, and RAIM flag.  Coordinate sentinel detection mirrors the
+  Class A decoder.
 
+- `include/aislib/messages/msg5.h` / `src/messages/msg5.cpp` —
+  `Msg5StaticAndVoyageData` decodes and encodes the two-part 426-bit type 5
+  message.  Fields covered: AIS version, IMO number, call sign (7 characters),
+  vessel name (20 characters), ship and cargo type, reference point dimensions
+  (bow, stern, port, starboard), EPFD type, ETA (month, day, hour, minute),
+  draught, destination (20 characters), and DTE flag.  Trailing `@` padding
+  and trailing spaces are stripped from all text fields on decode.
+
+- `include/aislib/messages/msg18.h` / `src/messages/msg18.cpp` —
+  `Msg18ClassBPositionReport` decodes and encodes the 168-bit type 18 message.
+  Fields covered: reserved, speed over ground, position accuracy, longitude,
+  latitude, course over ground, true heading, time stamp, regional reserved,
+  CS flag, display flag, DSC flag, band flag, message 22 flag, assigned flag,
+  and RAIM flag.
+
+- `include/aislib/messages/msg24.h` / `src/messages/msg24.cpp` —
+  `Msg24StaticDataReport` decodes and encodes both parts of the 168-bit type
+  24 message.  Part A carries vessel name (20 characters).  Part B carries
+  ship type, vendor ID (7 characters), call sign (7 characters), reference
+  point dimensions, and EPFD type.  Part A and Part B are independent
+  single-part sentences; the decoder branches on the part number field.
+
+- `include/aislib/registry_init.h` / `src/registry_init.cpp` —
+  `register_all_decoders()` registers decoder functions for all message types
+  implemented in Phase 2 (1, 2, 3, 4, 5, 11, 18, 24) with the
+  `MessageRegistry` singleton.  Callers must invoke this function once at
+  startup before issuing any `MessageRegistry::decode()` calls.
+
+- `include/aislib/aislib.h` — umbrella header that includes all Phase 1 and
+  Phase 2 public headers in a single include.  Intended for consumers that do
+  not need to control include granularity.
+
+- `tests/messages/` — 97 unit tests across five files covering all Phase 2
+  message types.  Each file provides a `build_*` helper that constructs a
+  valid raw bit buffer for the corresponding message, field-level decode tests,
+  padding-strip tests, encode/decode round-trip tests, too-short payload error
+  tests, wrong-type error tests, and registry dispatch tests.
+
+### Fixed
+
+- `src/core/bitfield.cpp` — `BitReader::read_text()` previously delegated
+  bounds checking to `check_bounds()`, which enforces a maximum field width of
+  64 bits.  A 20-character text field spans 120 bits, causing every multi-char
+  text read to return `ErrorCode::BitfieldWidthInvalid`.  The call to
+  `check_bounds()` has been replaced with a direct range check
+  (`offset + char_count * 6 > bit_length()`), which carries no upper-bound
+  restriction.  All existing `ReadText_OutOfRange` tests continue to pass.
+
+---
 
 ## [0.1.0] — 2026-03-11
 
@@ -236,5 +170,23 @@ Initial release.  Implements the complete Phase 1 core parsing infrastructure.
   suppressed during its build and its headers marked `SYSTEM`.  Coverage
   instrumentation available via `-DPGAIS_ENABLE_COVERAGE=ON`.
 
-- `tests/core/` — 152 unit tests across six files covering all public APIs,
+- `tests/core/` — 153 unit tests across six files covering all public APIs,
   all documented error conditions, and encode/decode round-trips.
+
+### Fixed
+
+- `src/core/sentence.cpp` — `SentenceAssembler::feed()` now validates that
+  every fragment of a multi-part sequence carries the same sentence type
+  (VDM or VDO) as the first fragment.  Previously, a sequence opened by a VDM
+  sentence could be completed by a VDO sentence, silently producing an
+  `AssembledMessage` with an incorrect `is_own_vessel` flag.  The new check
+  returns `ErrorCode::MultipartTalkerConflict`.
+
+- `src/core/payload.cpp` — replaced a `goto`-based early exit in
+  `decode_payload()` with a named static helper `unpack_bits()`.
+
+- `src/core/bitfield.cpp` / `include/aislib/bitfield.h` — corrected the
+  invalid-input sentinel for `ascii_to_ais6bit()` from 15 to 63, making the
+  documented and implemented behaviour consistent.  Value 63 maps back to `'?'`
+  via `ais6bit_to_ascii()`, is printable, and is distinct from the padding
+  character `'@'` (value 0).
