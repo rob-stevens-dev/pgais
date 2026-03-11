@@ -44,6 +44,8 @@ protected:
  * @brief Builds a minimal type 5 bit buffer with specified field values.
  *
  * Parameters use the same field order as Msg5StaticAndVoyageData::decode().
+ * The buffer is exactly 426 bits: 424 content bits plus the 2-bit spare
+ * defined in ITU-R M.1371-5 Table 47 (bits 423-424).
  */
 static std::vector<uint8_t> build_type5(
     uint32_t           mmsi          = 123456789u,
@@ -61,33 +63,34 @@ static std::vector<uint8_t> build_type5(
     uint8_t            eta_day       = 4u,
     uint8_t            eta_hour      = 8u,
     uint8_t            eta_minute    = 0u,
-    uint8_t            draught       = 55u,   // 5.5 metres * 10
+    uint8_t            draught       = 55u,
     const std::string& destination   = "PORT OF HOUSTON",
     bool               dte           = false
 )
 {
     BitWriter w(426u);
-    EXPECT_TRUE(w.write_uint(5u,       6u).ok());
-    EXPECT_TRUE(w.write_uint(0u,       2u).ok());
-    EXPECT_TRUE(w.write_uint(mmsi,    30u).ok());
-    EXPECT_TRUE(w.write_uint(ais_ver,  2u).ok());
-    EXPECT_TRUE(w.write_uint(imo,     30u).ok());
-    EXPECT_TRUE(w.write_text(call_sign, 7u).ok());
-    EXPECT_TRUE(w.write_text(vessel_name, 20u).ok());
-    EXPECT_TRUE(w.write_uint(ship_type, 8u).ok());
-    EXPECT_TRUE(w.write_uint(dim_bow,   9u).ok());
-    EXPECT_TRUE(w.write_uint(dim_stern, 9u).ok());
-    EXPECT_TRUE(w.write_uint(dim_port,  6u).ok());
-    EXPECT_TRUE(w.write_uint(dim_stbd,  6u).ok());
-    EXPECT_TRUE(w.write_uint(epfd,      4u).ok());
-    EXPECT_TRUE(w.write_uint(eta_month, 4u).ok());
-    EXPECT_TRUE(w.write_uint(eta_day,   5u).ok());
-    EXPECT_TRUE(w.write_uint(eta_hour,  5u).ok());
-    EXPECT_TRUE(w.write_uint(eta_minute,6u).ok());
-    EXPECT_TRUE(w.write_uint(draught,   8u).ok());
-    EXPECT_TRUE(w.write_text(destination, 20u).ok());
+    EXPECT_TRUE(w.write_uint(5u,          6u).ok());
+    EXPECT_TRUE(w.write_uint(0u,          2u).ok());
+    EXPECT_TRUE(w.write_uint(mmsi,       30u).ok());
+    EXPECT_TRUE(w.write_uint(ais_ver,     2u).ok());
+    EXPECT_TRUE(w.write_uint(imo,        30u).ok());
+    EXPECT_TRUE(w.write_text(call_sign,   7u).ok());
+    EXPECT_TRUE(w.write_text(vessel_name,20u).ok());
+    EXPECT_TRUE(w.write_uint(ship_type,   8u).ok());
+    EXPECT_TRUE(w.write_uint(dim_bow,     9u).ok());
+    EXPECT_TRUE(w.write_uint(dim_stern,   9u).ok());
+    EXPECT_TRUE(w.write_uint(dim_port,    6u).ok());
+    EXPECT_TRUE(w.write_uint(dim_stbd,    6u).ok());
+    EXPECT_TRUE(w.write_uint(epfd,        4u).ok());
+    EXPECT_TRUE(w.write_uint(eta_month,   4u).ok());
+    EXPECT_TRUE(w.write_uint(eta_day,     5u).ok());
+    EXPECT_TRUE(w.write_uint(eta_hour,    5u).ok());
+    EXPECT_TRUE(w.write_uint(eta_minute,  6u).ok());
+    EXPECT_TRUE(w.write_uint(draught,     8u).ok());
+    EXPECT_TRUE(w.write_text(destination,20u).ok());
     EXPECT_TRUE(w.write_bool(dte).ok());
-    EXPECT_TRUE(w.write_uint(0u, 1u).ok()); // spare
+    // Bits 423-424: spare (2 bits), always zero per ITU-R M.1371-5 Table 47.
+    EXPECT_TRUE(w.write_uint(0u,          2u).ok());
     return w.buffer();
 }
 
@@ -251,8 +254,8 @@ TEST_F(Msg5Test, DecodeType5_DTE_NotAvailable)
 
 TEST_F(Msg5Test, CallSignPaddingStripped)
 {
-    // "AB" is 2 characters; write_text will pad to 7 with '@'.
-    // read_text strips the trailing '@' padding, so we expect "AB" back.
+    // "AB" is 2 characters; write_text pads to 7 with '@'.
+    // read_text strips the trailing '@' on decode, so we expect "AB" back.
     auto buf = build_type5(0u, 0u, 0u, "AB");
     BitReader reader(buf);
     auto r = Msg5StaticAndVoyageData::decode(reader);
@@ -311,8 +314,8 @@ TEST_F(Msg5Test, EncodeDecodeRoundtrip_AllFields)
     EXPECT_EQ(msg2->vessel_name(),   "ATLANTIC SUNRISE");
     EXPECT_EQ(msg2->ship_type(),     71u);
     EXPECT_EQ(msg2->dim_to_bow(),    200u);
-    EXPECT_EQ(msg2->dim_to_stern(),  40u);
-    EXPECT_EQ(msg2->dim_to_port(),   15u);
+    EXPECT_EQ(msg2->dim_to_stern(),   40u);
+    EXPECT_EQ(msg2->dim_to_port(),    15u);
     EXPECT_EQ(msg2->dim_to_starboard(), 18u);
     EXPECT_EQ(msg2->epfd(),          3u);
     EXPECT_EQ(msg2->eta_month(),     9u);
@@ -342,8 +345,8 @@ TEST_F(Msg5Test, DecodeWrongType_ReturnsDecodeFailure)
 {
     auto buf = build_type5();
     // Overwrite the first 6 bits with type 1.
-    // The BitWriter wrote type 5 (0b000101) into the MSBs of byte 0.
-    // Patch to type 1 (0b000001): byte 0 becomes (1 << 2) = 0x04.
+    // Type 5 is 0b000101, packed into the high 6 bits of byte 0 as 0b00010100 = 0x14.
+    // Type 1 is 0b000001, which becomes 0b00000100 = 0x04 in the high 6 bits.
     buf[0] = static_cast<uint8_t>((1u << 2u) | (buf[0] & 0x03u));
     BitReader reader(buf);
     auto r = Msg5StaticAndVoyageData::decode(reader);
