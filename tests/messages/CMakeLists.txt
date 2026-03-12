@@ -25,9 +25,13 @@ endif()
 add_executable(pgais_messages_tests
     test_msg1_3.cpp
     test_msg4_11.cpp
-    test_msg5.cpp
+    test_msg05.cpp
+    test_msg09.cpp
+    test_msg10.cpp
     test_msg18.cpp
+    test_msg19.cpp
     test_msg24.cpp
+    test_msg27.cpp
 )
 
 target_link_libraries(pgais_messages_tests
