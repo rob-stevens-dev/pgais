@@ -19,7 +19,7 @@ PostgreSQL extension module targeting versions 11 and later.
 ## Requirements
 
 - C++17-compliant compiler (GCC 8+, Clang 7+, MSVC 19.14+)
-- CMake 3.16 or later
+- CMake 3.20 or later
 - Internet access during the first build (Google Test is fetched via CMake
   FetchContent)
 
@@ -45,7 +45,6 @@ To enable coverage instrumentation (GCC or Clang only):
 ```sh
 cmake --preset coverage
 cmake --build --preset coverage
-ctest --preset coverage
 lcov --capture --directory build/coverage --output-file coverage.info
 genhtml coverage.info --output-directory coverage_html
 ```
@@ -69,9 +68,13 @@ target_link_libraries(my_target PRIVATE pgais::pgais_core)
 
 ## Usage
 
-An umbrella header (`aislib/aislib.h`) will be provided once the first
-concrete message decoders land in Phase 2.  Until then, include the individual
-headers directly.
+Include the umbrella header and call `register_all_decoders()` once at startup:
+
+```cpp
+#include <aislib/aislib.h>
+
+aislib::register_all_decoders();
+```
 
 ### Parsing a single sentence
 
@@ -134,17 +137,18 @@ phases and follow the same pattern: a decoder function is registered with
 
 ## Project Roadmap
 
-Phase 1 establishes the core parsing infrastructure described above.
-Subsequent phases add concrete message decoders in the following order:
+The table below reflects the actual phase execution.  Phases 1 through 3 are
+complete.
 
-- Phase 2: Message types 1, 2, 3 (Position Report Class A)
-- Phase 3: Message types 4, 5, 11 (Base Station Report, Static/Voyage Data)
-- Phase 4: Message types 6, 7, 8, 9 (Binary addressed, acknowledge, broadcast, SAR)
-- Phase 5: Message types 10, 12 through 17
-- Phase 6: Message types 18 through 27 (Class B, long-range, channel management)
-- Phase 7: Multi-part binary data completeness and the generation (encode) path
-- Phase 8: PostgreSQL extension scaffold (versions 11 and later)
-- Phase 9: Integration tests, fuzz testing, and coverage hardening
+| Phase | Status   | Message types                                      | Notes                                          |
+|-------|----------|----------------------------------------------------|------------------------------------------------|
+| 1     | Complete | —                                                  | Core infrastructure: error handling, bit engine, payload codec, sentence framer, message base and registry |
+| 2     | Complete | 1, 2, 3, 4, 5, 11, 18, 24                         | Class A position reports, base station, static/voyage data, Class B, static data report |
+| 3     | Complete | 9, 10, 19, 27                                      | SAR aircraft, UTC inquiry, extended Class B, long-range broadcast |
+| 4     | Planned  | 6, 7, 8, 12, 13, 14                                | Binary addressed/broadcast, safety messages, acknowledgements |
+| 5     | Planned  | 15, 16, 17, 20, 21, 22, 23, 25, 26                | Interrogation, assignment, DGNSS, data link management, aid to navigation, channel management, group assignment, binary messages with application data |
+| 6     | Planned  | —                                                  | PostgreSQL extension scaffold targeting versions 11 and later |
+| 7     | Planned  | —                                                  | Integration tests, fuzz testing, and coverage hardening |
 
 ## Error Handling Model
 
