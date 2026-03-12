@@ -25,8 +25,8 @@ namespace aislib {
  *   Bit   38   : Position accuracy (1)
  *   Bit   39   : RAIM flag (1)
  *   Bits 40–43 : Navigation status (4)
- *   Bits 44–61 : Longitude (18, signed, 1/10 degree; sentinel 0x1A838)
- *   Bits 62–78 : Latitude (17, signed, 1/10 degree; sentinel 0xD548)
+ *   Bits 44–61 : Longitude (18, signed, 1/10 degree; sentinel 1810)
+ *   Bits 62–78 : Latitude (17, signed, 1/10 degree; sentinel 910)
  *   Bits 79–84 : Speed over ground (6, knots; sentinel 63)
  *   Bits 85–93 : Course over ground (9, degrees; sentinel 511)
  *   Bit   94   : GNSS position status (1)
@@ -36,8 +36,8 @@ namespace aislib {
  * 1/10 000 minute (approximately 1/600 000 degree) used by Class A and B.
  * The sentinels are correspondingly different:
  *
- *   Longitude sentinel: 0x1A838 = 181 * 10 * 10 = 18100 (raw integer value)
- *   Latitude sentinel:  0xD548  =  91 * 10 * 10 =  9100 (raw integer value)
+ *   Longitude sentinel: 1810  = 181 * 10  (181 degrees in 1/10 degree units)
+ *   Latitude sentinel:   910  =  91 * 10  ( 91 degrees in 1/10 degree units)
  *
  * Speed over ground is in whole knots, maximum valid value 62.  The value 63
  * means "not available or over 62 knots".
@@ -57,11 +57,19 @@ namespace aislib {
 // Sentinel values specific to type 27
 // ---------------------------------------------------------------------------
 
-/** Longitude "not available" raw integer value for type 27 (1/10 degree units). */
-inline constexpr int32_t kMsg27LongitudeUnavailable = 0x1A838;  // 108600
+/**
+ * Longitude "not available" raw integer value for type 27 (1/10 degree units).
+ * Derived from 181 * 10, representing one degree beyond the valid range of
+ * [-180, +180] in 1/10 degree resolution.
+ */
+inline constexpr int32_t kMsg27LongitudeUnavailable = 1810;
 
-/** Latitude "not available" raw integer value for type 27 (1/10 degree units). */
-inline constexpr int32_t kMsg27LatitudeUnavailable = 0xD548;    // 54600
+/**
+ * Latitude "not available" raw integer value for type 27 (1/10 degree units).
+ * Derived from 91 * 10, representing one degree beyond the valid range of
+ * [-90, +90] in 1/10 degree resolution.
+ */
+inline constexpr int32_t kMsg27LatitudeUnavailable = 910;
 
 /** SOG "not available" raw value for type 27 (whole knots). */
 inline constexpr uint8_t kMsg27SogUnavailable = 63u;
@@ -217,17 +225,13 @@ private:
     bool     gnss_position_status_;
 };
 
-// ---------------------------------------------------------------------------
-// DecoderFn wrapper
-// ---------------------------------------------------------------------------
-
 /**
- * @brief Decoder function for AIS message type 27.
+ * @brief Free decoder function for type 27, compatible with DecoderFn.
  *
- * Satisfies the @c DecoderFn signature required by MessageRegistry.
- * Delegates directly to Msg27LongRangeBroadcast::decode().
+ * Delegates to Msg27LongRangeBroadcast::decode().  This function is
+ * registered with MessageRegistry by register_all_decoders().
  *
- * @param reader  A BitReader positioned at bit 0 of the decoded payload.
+ * @param reader  A BitReader over the decoded payload bit stream.
  * @return        A decoded message object, or an Error.
  */
 [[nodiscard]] Result<std::unique_ptr<Message>> decode_msg27(const BitReader& reader);
