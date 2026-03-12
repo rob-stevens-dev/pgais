@@ -78,8 +78,12 @@ add_library(pgais_messages
     src/messages/msg1_3.cpp
     src/messages/msg4_11.cpp
     src/messages/msg5.cpp
+    src/messages/msg09.cpp
+    src/messages/msg10.cpp
     src/messages/msg18.cpp
+    src/messages/msg19.cpp
     src/messages/msg24.cpp
+    src/messages/msg27.cpp
     src/registry_init.cpp
 )
 
