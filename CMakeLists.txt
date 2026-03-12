@@ -77,7 +77,7 @@ set_target_properties(pgais_core PROPERTIES
 add_library(pgais_messages
     src/messages/msg1_3.cpp
     src/messages/msg4_11.cpp
-    src/messages/msg5.cpp
+    src/messages/msg05.cpp
     src/messages/msg09.cpp
     src/messages/msg10.cpp
     src/messages/msg18.cpp

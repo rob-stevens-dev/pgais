@@ -33,7 +33,7 @@
 // Message type decoders — Phase 2
 #include "aislib/messages/msg1_3.h"
 #include "aislib/messages/msg4_11.h"
-#include "aislib/messages/msg5.h"
+#include "aislib/messages/msg05.h"
 #include "aislib/messages/msg18.h"
 #include "aislib/messages/msg24.h"
 

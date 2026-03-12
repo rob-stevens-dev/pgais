@@ -8,7 +8,7 @@
 namespace aislib {
 
 /**
- * @file messages/msg5.h
+ * @file messages/msg05.h
  * @brief AIS message type 5 — Static and voyage related data.
  *
  * ITU-R M.1371-5, Section 3.3.5 defines message type 5 as a two-part message

@@ -1,5 +1,5 @@
 /**
- * @file test_msg5.cpp
+ * @file test_msg05.cpp
  * @brief Unit tests for AIS message type 5 (static and voyage related data).
  *
  * Tests cover:
@@ -15,7 +15,7 @@
 #include <gtest/gtest.h>
 
 #include "aislib/message.h"
-#include "aislib/messages/msg5.h"
+#include "aislib/messages/msg05.h"
 #include "aislib/payload.h"
 #include "aislib/registry_init.h"
 
